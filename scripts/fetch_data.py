@@ -136,9 +136,10 @@ def fetch_iserv(user, password):
     session = requests.Session()
     session.headers["User-Agent"] = "Mozilla/5.0 (Dashboard)"
     session.get(f"{ISERV_BASE}/iserv/auth/login", timeout=30)
+    # Das Login-Formular postet auf die Login-Seite selbst (kein CSRF-Token)
     resp = session.post(
-        f"{ISERV_BASE}/iserv/app/login",
-        data={"_username": user, "_password": password, "_remember_me": "0"},
+        f"{ISERV_BASE}/iserv/auth/login",
+        data={"_username": user, "_password": password},
         timeout=30,
     )
     resp.raise_for_status()
