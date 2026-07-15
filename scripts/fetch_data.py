@@ -46,6 +46,38 @@ def fmt_time(t):
     return f"{t // 100:02d}:{t % 100:02d}"
 
 
+def fetch_untis_teachers_rest(session, person_id, monday):
+    """Lehrerkuerzel ueber die interne Webview-API holen.
+
+    Die JSON-RPC-Antwort enthaelt bei dieser Schule keine Lehrernamen; die
+    Webansicht zeigt sie aber (z.B. "RomMa"). Diese API liefert genau diese
+    Kuerzel. Rueckgabe: {(date_int, startTime_int): "Kuerzel, Kuerzel"}.
+    """
+    resp = session.get(
+        f"{UNTIS_SERVER}/WebUntis/api/public/timetable/weekly/data",
+        params={"elementType": 5, "elementId": person_id,
+                "date": monday.isoformat()},
+        headers={"Accept": "application/json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    payload = resp.json()["data"]["result"]["data"]
+
+    names = {}
+    for el in payload.get("elements", []):
+        names[(el.get("type"), el.get("id"))] = (
+            el.get("name") or el.get("displayname") or "")
+
+    out = {}
+    for period in payload.get("elementPeriods", {}).get(str(person_id), []):
+        codes = [names.get((2, e.get("id")), "")
+                 for e in period.get("elements", []) if e.get("type") == 2]
+        codes = [c for c in codes if c]
+        if codes:
+            out[(period.get("date"), period.get("startTime"))] = ", ".join(codes)
+    return out
+
+
 def fetch_untis(user, password):
     """Stundenplan der aktuellen Woche (Mo-Sa) als Liste von Tagen."""
     session = requests.Session()
@@ -92,6 +124,11 @@ def fetch_untis(user, password):
     def t_name(t):
         return t.get("longname") or t.get("name") or ""
 
+    debug = {
+        "te_sample": next((l.get("te") for l in result or [] if l.get("te")), None),
+        "rest_teachers": None,
+    }
+
     teacher_map = {}
     if any(not t_name(t) for lesson in result or [] for t in lesson.get("te") or []):
         try:
@@ -100,6 +137,15 @@ def fetch_untis(user, password):
                                         or t.get("name", ""))
         except Exception as exc:
             print(f"WebUntis getTeachers nicht verfuegbar: {exc}", file=sys.stderr)
+
+    # Fallback: Lehrerkuerzel aus der Webview-API (liefert z.B. "RomMa")
+    rest_map = {}
+    try:
+        rest_map = fetch_untis_teachers_rest(session, person_id, monday)
+        debug["rest_teachers"] = len(rest_map)
+    except Exception as exc:
+        debug["rest_teachers"] = f"Fehler: {exc}"
+        print(f"WebUntis Webview-API: {exc}", file=sys.stderr)
 
     try:
         untis_rpc(session, "logout", {})
@@ -114,14 +160,17 @@ def fetch_untis(user, password):
         teachers = lesson.get("te") or []
         info = " ".join(filter(None, [
             lesson.get("substText"), lesson.get("info"), lesson.get("lstext")]))
+        teacher = ", ".join(filter(None, (
+            t_name(t) or teacher_map.get(t.get("id"), "") for t in teachers)))
+        if not teacher:
+            teacher = rest_map.get((lesson["date"], lesson["startTime"]), "")
         days.setdefault(date.isoformat(), []).append({
             "start": fmt_time(lesson["startTime"]),
             "end": fmt_time(lesson["endTime"]),
             "subject": (subjects[0].get("longname") or subjects[0].get("name")) if subjects else "?",
             "subjectShort": subjects[0].get("name") if subjects else "?",
             "room": ", ".join(r.get("name", "") for r in rooms),
-            "teacher": ", ".join(filter(None, (
-                t_name(t) or teacher_map.get(t.get("id"), "") for t in teachers))),
+            "teacher": teacher,
             "code": lesson.get("code", ""),  # "" | "cancelled" | "irregular"
             "info": info.strip(),
         })
@@ -130,7 +179,7 @@ def fetch_untis(user, password):
     for date_str in sorted(days):
         lessons = sorted(days[date_str], key=lambda l: l["start"])
         day_list.append({"date": date_str, "lessons": lessons})
-    return day_list
+    return day_list, debug
 
 
 # ------------------------------------------------------------------ IServ
@@ -181,6 +230,15 @@ def fetch_iserv(user, password):
     print(f"IServ: {len(links)} Aufgaben-Links auf '{title}' ({resp.url})",
           file=sys.stderr)
 
+    # Diagnose: welche Seite wurde geladen, welche Module gibt es?
+    modules = sorted({
+        (a.get_text(strip=True)[:30], a["href"][:80])
+        for a in soup.find_all("a", href=True)
+        if "/iserv/" in a["href"] and a.get_text(strip=True)
+    })[:30]
+    debug = {"url": str(resp.url), "title": title,
+             "links": len(links), "modules": modules}
+
     tasks, seen = [], set()
     for link in links:
         url = requests.compat.urljoin(ISERV_BASE, link["href"])
@@ -201,7 +259,7 @@ def fetch_iserv(user, password):
         })
 
     tasks.sort(key=lambda t: t["due"] or "9999")
-    return tasks
+    return tasks, debug
 
 
 # ------------------------------------------------------------------- main
@@ -218,7 +276,7 @@ def main():
     untis_pass = os.environ.get("UNTIS_PASS")
     if untis_user and untis_pass:
         try:
-            data["untis"]["days"] = fetch_untis(untis_user, untis_pass)
+            data["untis"]["days"], data["untis"]["debug"] = fetch_untis(untis_user, untis_pass)
             data["untis"]["ok"] = True
         except Exception as exc:  # noqa: BLE001
             data["untis"]["error"] = str(exc)
@@ -230,7 +288,7 @@ def main():
     iserv_pass = os.environ.get("ISERV_PASS")
     if iserv_user and iserv_pass:
         try:
-            data["iserv"]["tasks"] = fetch_iserv(iserv_user, iserv_pass)
+            data["iserv"]["tasks"], data["iserv"]["debug"] = fetch_iserv(iserv_user, iserv_pass)
             data["iserv"]["ok"] = True
         except Exception as exc:  # noqa: BLE001
             data["iserv"]["error"] = str(exc)
