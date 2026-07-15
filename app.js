@@ -443,7 +443,16 @@ async function loadTodos() {
       cache: "no-store",
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const record = (await resp.json()).record || {};
+    let record = (await resp.json()).record || {};
+    // Das ToDo-Board verschluesselt seinen Stand mit demselben Passwort wie
+    // dieses Dashboard; es liegt nach dem Entsperren im localStorage.
+    if (record.encrypted) {
+      try {
+        record = await decryptPayload(record, localStorage.getItem(LOCK_KEY) || "");
+      } catch {
+        throw new Error("Passwort passt nicht zum ToDo-Board");
+      }
+    }
     const wanted = new Map((record.categories || [])
       .filter((c) => CONFIG.todoCategories.includes(c.name))
       .map((c) => [c.id, c.name]));
