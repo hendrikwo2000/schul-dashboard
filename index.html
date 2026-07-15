@@ -4,13 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Schul-Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <meta name="theme-color" content="#3b6fe0">
+  <script>
+    // Theme sofort setzen (vor dem Rendern, verhindert Aufblitzen)
+    document.documentElement.dataset.theme =
+      localStorage.getItem("theme") ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
     <div class="header-row">
       <h1>📚 Schul-Dashboard</h1>
-      <div class="header-links" id="header-links"></div>
+      <div class="header-links">
+        <span id="header-links"></span>
+        <button id="theme-btn" class="theme-btn" title="Hell/Dunkel umschalten">☾</button>
+      </div>
     </div>
     <div class="header-sub">
       <span id="today-label"></span>
@@ -36,7 +47,7 @@
     <div class="col">
       <section class="card" id="timetable-card">
         <div class="card-head">
-          <h2>🕗 Stundenplan</h2>
+          <h2><a href="https://hh5910.webuntis.com/WebUntis/?school=hh5910" data-app="untis://" target="_blank" rel="noopener">🕗 Stundenplan<span class="ext">↗</span></a></h2>
           <div class="toggle" role="tablist">
             <button id="btn-today" class="active" role="tab">Heute</button>
             <button id="btn-week" role="tab">Woche</button>
@@ -47,7 +58,7 @@
 
       <section class="card" id="calendar-card">
         <div class="card-head">
-          <h2>📆 Termine</h2>
+          <h2><a href="https://calendar.google.com/" data-app="googlecalendar://" target="_blank" rel="noopener">📆 Termine<span class="ext">↗</span></a></h2>
           <div class="toggle" role="tablist">
             <button id="btn-cal-today" class="active" role="tab">Heute</button>
             <button id="btn-cal-week" role="tab">7 Tage</button>
@@ -60,14 +71,14 @@
     <div class="col">
       <section class="card" id="tasks-card">
         <div class="card-head">
-          <h2>📝 Offene Aufgaben <span class="muted small">(IServ)</span></h2>
+          <h2><a href="https://bea-portal.de/iserv/exercise" data-app="iserv://" target="_blank" rel="noopener">📝 Offene Aufgaben <span class="muted small">(IServ)</span><span class="ext">↗</span></a></h2>
         </div>
         <div id="tasks"></div>
       </section>
 
       <section class="card" id="todos-card">
         <div class="card-head">
-          <h2>✅ ToDos <span class="muted small">(Schule &amp; Facharbeit)</span></h2>
+          <h2><a href="https://hendrikwo2000.github.io/todo-app/" target="_blank" rel="noopener">✅ ToDos <span class="muted small">(Schule &amp; Facharbeit)</span><span class="ext">↗</span></a></h2>
         </div>
         <div id="todos"></div>
       </section>

@@ -5,7 +5,9 @@ const CONFIG = {
   // Link zu deiner ToDo-App (GitHub-Pages-URL eintragen, leer = Kachel ausblenden)
   todoAppUrl: "https://hendrikwo2000.github.io/todo-app/",
   iservUrl: "https://bea-portal.de/iserv/exercise",
+  iservApp: "iserv://",
   untisUrl: "https://hh5910.webuntis.com/WebUntis/?school=hh5910",
+  untisApp: "untis://",
   repoUrl: "https://github.com/hendrikwo2000/schul-dashboard",
   // ToDo-Board (JSONBin-Cloud der ToDo-App; Key ist bewusst nur für dieses Bin gültig)
   jsonbinUrl: "https://api.jsonbin.io/v3/b/6a4bf236da38895dfe36c173/latest",
@@ -22,6 +24,41 @@ let calView = "today";
 
 // ---------------------------------------------------------------- Hilfen
 const $ = (sel) => document.querySelector(sel);
+const IS_MOBILE = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+// Auf dem Handy zuerst die App versuchen; oeffnet sie sich nicht,
+// nach 1,5 s automatisch auf die Website ausweichen. Am PC: Website.
+function bindAppLinks() {
+  document.querySelectorAll("a[data-app]").forEach((a) => {
+    if (a.dataset.bound) return;
+    a.dataset.bound = "1";
+    a.addEventListener("click", (e) => {
+      if (!IS_MOBILE) return;
+      e.preventDefault();
+      const webUrl = a.href;
+      const timer = setTimeout(() => { window.location.href = webUrl; }, 1500);
+      const cancel = () => clearTimeout(timer);
+      window.addEventListener("pagehide", cancel, { once: true });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) cancel();
+      }, { once: true });
+      window.location.href = a.dataset.app;
+    });
+  });
+}
+
+// ---------------------------------------------------------------- Theme
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("#theme-btn").textContent = theme === "dark" ? "☀" : "☾";
+}
+
+$("#theme-btn").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+});
+applyTheme(document.documentElement.dataset.theme);
 
 function esc(s) {
   const div = document.createElement("div");
@@ -52,9 +89,10 @@ function renderHeader() {
 
   const links = [];
   if (CONFIG.todoAppUrl) links.push(`<a href="${esc(CONFIG.todoAppUrl)}" target="_blank" rel="noopener">✅ ToDo-Board</a>`);
-  links.push(`<a href="${esc(CONFIG.iservUrl)}" target="_blank" rel="noopener">🏫 IServ</a>`);
-  links.push(`<a href="${esc(CONFIG.untisUrl)}" target="_blank" rel="noopener">📅 WebUntis</a>`);
+  links.push(`<a href="${esc(CONFIG.iservUrl)}" data-app="${esc(CONFIG.iservApp)}" target="_blank" rel="noopener">🏫 IServ</a>`);
+  links.push(`<a href="${esc(CONFIG.untisUrl)}" data-app="${esc(CONFIG.untisApp)}" target="_blank" rel="noopener">📅 WebUntis</a>`);
   $("#header-links").innerHTML = links.join("");
+  bindAppLinks();
 
   if (CONFIG.repoUrl) $("#repo-link").href = CONFIG.repoUrl;
   else $("#repo-link").parentElement.lastElementChild.style.display = "none";
@@ -365,6 +403,7 @@ async function load() {
   loadTodos(); // erst nach dem Entsperren laden
 }
 
+bindAppLinks(); // Kachel-Links (statisches HTML) sofort binden
 load();
 // Alle 10 Minuten neu laden (falls die Seite offen bleibt)
 setInterval(load, 10 * 60 * 1000);
