@@ -1,14 +1,60 @@
 {
-  "updated": "2026-07-15T18:25:09+02:00",
+  "updated": "2026-07-15T18:36:22+02:00",
   "demo": false,
   "untis": {
-    "ok": false,
-    "error": "WebUntis getTimetable: startDate and endDate are not within a single school year.",
-    "days": []
+    "ok": true,
+    "error": null,
+    "days": [
+      {
+        "date": "2026-07-17",
+        "lessons": [
+          {
+            "start": "08:00",
+            "end": "09:30",
+            "subject": "Lernfeld",
+            "subjectShort": "FST-LF",
+            "room": "4.71",
+            "teacher": "",
+            "code": "",
+            "info": ""
+          },
+          {
+            "start": "09:45",
+            "end": "11:15",
+            "subject": "Lernfeld",
+            "subjectShort": "FST-LF",
+            "room": "4.05",
+            "teacher": "",
+            "code": "",
+            "info": ""
+          },
+          {
+            "start": "11:45",
+            "end": "13:15",
+            "subject": "Lernfeld",
+            "subjectShort": "FST-LF",
+            "room": "4.05",
+            "teacher": "",
+            "code": "",
+            "info": ""
+          },
+          {
+            "start": "13:30",
+            "end": "15:00",
+            "subject": "Lernfeld",
+            "subjectShort": "FST-LF",
+            "room": "4.05",
+            "teacher": "",
+            "code": "",
+            "info": ""
+          }
+        ]
+      }
+    ]
   },
   "iserv": {
     "ok": false,
-    "error": "ISERV_USER/ISERV_PASS nicht gesetzt",
+    "error": "IServ-Login fehlgeschlagen (Benutzername/Passwort pruefen)",
     "tasks": []
   }
 }
