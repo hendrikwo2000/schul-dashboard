@@ -90,6 +90,10 @@ def fetch_untis(user, password):
 
     today = dt.datetime.now(TZ).date()
     monday = today - dt.timedelta(days=today.weekday())
+    # Sonntags ist die laufende Woche durch -> die kommende zeigen, sonst
+    # stuende den ganzen Sonntag die vergangene Woche im Dashboard
+    if today.weekday() == 6:
+        monday += dt.timedelta(days=7)
     saturday = monday + dt.timedelta(days=5)
 
     # WebUntis lehnt Abfragen ueber die Schuljahresgrenze hinweg ab -> Woche
@@ -181,7 +185,9 @@ def fetch_untis(user, password):
     for date_str in sorted(days):
         lessons = sorted(days[date_str], key=lambda l: l["start"])
         day_list.append({"date": date_str, "lessons": lessons})
-    return day_list, debug
+    # Tage ohne Unterricht fehlen in day_list; ohne den abgefragten Zeitraum
+    # kann das Dashboard "frei" nicht von "nicht abgefragt" unterscheiden.
+    return day_list, debug, (monday.isoformat(), saturday.isoformat())
 
 
 # ------------------------------------------------------------------ IServ
@@ -386,6 +392,7 @@ def fetch_calendar(ics_url):
                 "location": str(ev.get("LOCATION", "") or ""),
                 "url": google_event_url(ev, calendar_id, day, recurring_uids),
                 "until": ends_on.isoformat() if span > 1 else None,
+                "spanDays": span,
             })
             day += dt.timedelta(days=1)
 
@@ -421,7 +428,7 @@ def main():
     data = {
         "updated": dt.datetime.now(TZ).isoformat(timespec="seconds"),
         "demo": False,
-        "untis": {"ok": False, "error": None, "days": []},
+        "untis": {"ok": False, "error": None, "days": [], "from": None, "to": None},
         "iserv": {"ok": False, "error": None, "tasks": []},
         "calendar": {"ok": False, "error": None, "events": []},
     }
@@ -430,7 +437,8 @@ def main():
     untis_pass = os.environ.get("UNTIS_PASS")
     if untis_user and untis_pass:
         try:
-            data["untis"]["days"], data["untis"]["debug"] = fetch_untis(untis_user, untis_pass)
+            (data["untis"]["days"], data["untis"]["debug"],
+             (data["untis"]["from"], data["untis"]["to"])) = fetch_untis(untis_user, untis_pass)
             data["untis"]["ok"] = True
         except Exception as exc:  # noqa: BLE001
             data["untis"]["error"] = str(exc)

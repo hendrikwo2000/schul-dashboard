@@ -305,6 +305,25 @@ main {
 .lock-msg { min-height: 1.2em; font-size: 0.85rem; color: var(--red); }
 
 /* ---------- Termine ---------- */
+/* Dauerläufer (Ferien o.ä.) als Leiste über der Terminliste */
+.runner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  margin: 0 0 10px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.runner .what { font-weight: 700; }
+.runner .until { font-size: 0.78rem; opacity: 0.85; white-space: nowrap; }
+a.runner:hover { filter: brightness(0.97); }
+
 .event {
   display: flex;
   align-items: center;

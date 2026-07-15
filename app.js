@@ -12,6 +12,8 @@ const CONFIG = {
   todoCategories: ["Schule", "Facharbeit"],
   // Ab diesem Alter der Daten warnt das Dashboard (die Action läuft alle 30 Min.)
   staleHours: 3,
+  // Ganztägige Termine ab dieser Länge kommen als Leiste statt an jedem Tag
+  longRunnerDays: 3,
 };
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -245,6 +247,20 @@ function renderTasks() {
 }
 
 // ---------------------------------------------------------------- Termine
+// Ganztägige Dauerläufer (Ferien, Praktikum, Urlaub) stehen sonst an jedem
+// einzelnen Tag in der Liste -> einmal als Leiste über den Kalender.
+function isLongRunner(ev) {
+  return ev.allday && (ev.spanDays || 1) >= CONFIG.longRunnerDays;
+}
+
+function longRunnerHTML(ev) {
+  const inner = `<span class="what">${esc(ev.title)}</span>` +
+    (ev.until ? `<span class="until">noch bis ${esc(fmtShort(ev.until))}</span>` : "");
+  return ev.url
+    ? `<a class="runner" href="${esc(ev.url)}" target="_blank" rel="noopener">${inner}</a>`
+    : `<div class="runner">${inner}</div>`;
+}
+
 function eventHTML(ev) {
   const time = ev.allday ? "" : `${ev.start || ""}${ev.end ? "–" + ev.end : ""}`;
   const badge =
@@ -275,12 +291,33 @@ function renderCalendar() {
   }
 
   const today = todayISO();
-  const events = calView === "today"
+  const inView = calView === "today"
     ? (cal.events || []).filter((e) => e.date === today)
     : (cal.events || []);
 
+  // Dauerläufer aussortieren und je Termin nur einmal zeigen
+  const runners = [];
+  const seen = new Set();
+  const events = [];
+  for (const ev of inView) {
+    if (!isLongRunner(ev)) {
+      events.push(ev);
+      continue;
+    }
+    const key = `${ev.title}|${ev.until}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      runners.push(ev);
+    }
+  }
+  const runnerHTML = runners.map(longRunnerHTML).join("");
+
   if (!events.length) {
-    el.innerHTML = `<div class="empty">${calView === "today" ? "Heute keine Termine 🎉" : "Keine Termine in den nächsten 7 Tagen."}</div>`;
+    // "weitere" nur, wenn oben schon eine Leiste steht
+    const w = runners.length ? "weiteren " : "";
+    el.innerHTML = runnerHTML + `<div class="empty">${calView === "today"
+      ? `Heute keine ${w}Termine 🎉`
+      : `Keine ${w}Termine in den nächsten 7 Tagen.`}</div>`;
     return;
   }
 
@@ -290,7 +327,7 @@ function renderCalendar() {
     byDay.get(ev.date).push(ev);
   }
 
-  el.innerHTML = [...byDay.entries()].map(([date, list]) => `
+  el.innerHTML = runnerHTML + [...byDay.entries()].map(([date, list]) => `
     ${calView === "week" || date !== today
       ? `<div class="day-title ${date === today ? "today" : ""}">${esc(fmtDate(date))}</div>`
       : ""}
@@ -422,6 +459,17 @@ function sayTime(hhmm) {
   return m ? `${h} Uhr ${m}` : `${h} Uhr`;
 }
 
+// "2026-08-26" -> "26. August" (die Stimme liest "26.08." sonst als Ziffern)
+function sayDate(iso) {
+  return new Date(iso + "T00:00")
+    .toLocaleDateString("de-DE", { day: "numeric", month: "long" });
+}
+
+function nowHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function joinList(items) {
   if (items.length < 2) return items.join("");
   return items.slice(0, -1).join(", ") + " und " + items[items.length - 1];
@@ -464,27 +512,51 @@ function speechParts() {
   const today = todayISO();
   const tomorrow = isoIn(1);
 
-  // --- Unterricht heute
-  const lessons = ((data?.untis?.days || []).find((d) => d.date === today)?.lessons || [])
-    .filter((l) => l.code !== "cancelled");
+  const lessonsOn = (iso) =>
+    ((data?.untis?.days || []).find((d) => d.date === iso)?.lessons || [])
+      .filter((l) => l.code !== "cancelled");
+  const feierabend = (list) => list.map((l) => l.end).sort().pop();
+  // Tage ohne Unterricht fehlen in den Daten - deshalb erst prüfen, ob der Tag
+  // überhaupt abgefragt wurde, sonst wäre sonntags jeder Montag "frei"
+  const known = (iso) =>
+    data?.untis?.from && iso >= data.untis.from && iso <= data.untis.to;
 
-  if (!lessons.length) {
-    parts.push("Heute hast du frei.");
-  } else {
-    const first = lessons[0];
-    parts.push(`Deine erste Stunde ist ${first.subject} um ${sayTime(first.start)}` +
-      (first.room ? `, in Raum ${first.room}` : "") + ".");
-    const feierabend = lessons.map((l) => l.end).sort().pop();
-    parts.push(`Feierabend hast du um ${sayTime(feierabend)}.`);
+  // --- Laufende Ferien o.ä. einmal vorneweg
+  const eventsOn = (iso) => (data?.calendar?.events || []).filter((e) => e.date === iso);
+  for (const ev of eventsOn(today).filter(isLongRunner)) {
+    parts.push(ev.until ? `${ev.title} — noch bis ${sayDate(ev.until)}.` : `${ev.title}.`);
   }
 
-  // --- Termine heute und morgen
+  // --- Unterricht: heute, solange noch etwas ansteht, sonst Ausblick auf morgen
+  const heute = lessonsOn(today);
+  const restHeute = heute.filter((l) => l.end > nowHM());
+
+  if (restHeute.length) {
+    const first = heute[0];
+    parts.push(`Deine erste Stunde ist ${first.subject} um ${sayTime(first.start)}` +
+      (first.room ? `, in Raum ${first.room}` : "") + ".");
+    parts.push(`Feierabend hast du um ${sayTime(feierabend(heute))}.`);
+  } else {
+    const freiHeute = !heute.length;
+    parts.push(freiHeute ? "Heute hast du frei." : "Der Unterricht ist für heute vorbei.");
+
+    const morgen = lessonsOn(tomorrow);
+    if (morgen.length) {
+      const first = morgen[0];
+      parts.push(`Morgen fängst du um ${sayTime(first.start)} mit ${first.subject} an` +
+        (first.room ? `, in Raum ${first.room}` : "") + ".");
+      parts.push(`Feierabend hast du morgen um ${sayTime(feierabend(morgen))}.`);
+    } else if (known(tomorrow)) {
+      parts.push(freiHeute ? "Morgen hast du auch frei." : "Morgen hast du frei.");
+    }
+  }
+
+  // --- Termine heute und morgen (Dauerläufer stehen schon oben)
   const sayEvent = (ev) =>
     ev.allday || !ev.start ? ev.title : `${ev.title} um ${sayTime(ev.start)}`;
-  const eventsOn = (iso) => (data?.calendar?.events || []).filter((e) => e.date === iso);
 
-  const evToday = eventsOn(today);
-  const evTomorrow = eventsOn(tomorrow);
+  const evToday = eventsOn(today).filter((e) => !isLongRunner(e));
+  const evTomorrow = eventsOn(tomorrow).filter((e) => !isLongRunner(e));
   if (evToday.length) {
     parts.push(evToday.length === 1
       ? `Heute steht ein Termin an: ${sayEvent(evToday[0])}.`
