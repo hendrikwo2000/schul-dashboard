@@ -21,17 +21,41 @@
     </div>
   </header>
 
+  <div id="lock" class="lock hidden">
+    <form id="lock-form" class="lock-box">
+      <div class="lock-icon">🔒</div>
+      <h2>Dashboard entsperren</h2>
+      <p class="muted small">Einmal pro Gerät eingeben — wird gespeichert.</p>
+      <input type="password" id="lock-pass" placeholder="Passwort" autocomplete="current-password" autofocus>
+      <button type="submit">Entsperren</button>
+      <div id="lock-msg" class="lock-msg"></div>
+    </form>
+  </div>
+
   <main>
-    <section class="card" id="timetable-card">
-      <div class="card-head">
-        <h2>🕗 Stundenplan</h2>
-        <div class="toggle" role="tablist">
-          <button id="btn-today" class="active" role="tab">Heute</button>
-          <button id="btn-week" role="tab">Woche</button>
+    <div class="col">
+      <section class="card" id="timetable-card">
+        <div class="card-head">
+          <h2>🕗 Stundenplan</h2>
+          <div class="toggle" role="tablist">
+            <button id="btn-today" class="active" role="tab">Heute</button>
+            <button id="btn-week" role="tab">Woche</button>
+          </div>
         </div>
-      </div>
-      <div id="timetable"></div>
-    </section>
+        <div id="timetable"></div>
+      </section>
+
+      <section class="card" id="calendar-card">
+        <div class="card-head">
+          <h2>📆 Termine</h2>
+          <div class="toggle" role="tablist">
+            <button id="btn-cal-today" class="active" role="tab">Heute</button>
+            <button id="btn-cal-week" role="tab">7 Tage</button>
+          </div>
+        </div>
+        <div id="calendar"></div>
+      </section>
+    </div>
 
     <div class="col">
       <section class="card" id="tasks-card">

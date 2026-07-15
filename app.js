@@ -18,6 +18,7 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 
 let data = null;
 let view = "today";
+let calView = "today";
 
 // ---------------------------------------------------------------- Hilfen
 const $ = (sel) => document.querySelector(sel);
@@ -156,6 +157,114 @@ function renderTasks() {
   el.innerHTML = open.map(taskHTML).join("");
 }
 
+// ---------------------------------------------------------------- Termine
+function eventHTML(ev) {
+  const time = ev.allday ? "" : `${ev.start}${ev.end ? "–" + ev.end : ""}`;
+  return `
+    <div class="event">
+      <div class="time">${esc(time)}</div>
+      <div class="what">
+        <div class="title">${esc(ev.title)}</div>
+        ${ev.location ? `<div class="detail">📍 ${esc(ev.location)}</div>` : ""}
+      </div>
+      ${ev.allday ? '<span class="allday">Ganztägig</span>' : ""}
+    </div>`;
+}
+
+function renderCalendar() {
+  const el = $("#calendar");
+  const cal = data?.calendar;
+
+  if (!cal || (cal.error && !cal.events?.length)) {
+    el.innerHTML = `<div class="error">Termine konnten nicht geladen werden: ${esc(cal?.error || "keine Daten")}</div>`;
+    return;
+  }
+
+  const today = todayISO();
+  const events = calView === "today"
+    ? (cal.events || []).filter((e) => e.date === today)
+    : (cal.events || []);
+
+  if (!events.length) {
+    el.innerHTML = `<div class="empty">${calView === "today" ? "Heute keine Termine 🎉" : "Keine Termine in den nächsten 7 Tagen."}</div>`;
+    return;
+  }
+
+  const byDay = new Map();
+  for (const ev of events) {
+    if (!byDay.has(ev.date)) byDay.set(ev.date, []);
+    byDay.get(ev.date).push(ev);
+  }
+
+  el.innerHTML = [...byDay.entries()].map(([date, list]) => `
+    ${calView === "week" || date !== today
+      ? `<div class="day-title ${date === today ? "today" : ""}">${esc(fmtDate(date))}</div>`
+      : ""}
+    ${list.map(eventHTML).join("")}
+  `).join("");
+}
+
+// ---------------------------------------------------------------- Entsperren
+const LOCK_KEY = "dashboardPass";
+
+function b64bytes(b64) {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+async function decryptPayload(payload, password) {
+  const material = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: b64bytes(payload.salt), iterations: payload.iterations, hash: "SHA-256" },
+    material, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: b64bytes(payload.iv) }, key, b64bytes(payload.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+function unlock(payload) {
+  return new Promise((resolve) => {
+    const overlay = $("#lock");
+    const form = $("#lock-form");
+    const input = $("#lock-pass");
+    const msg = $("#lock-msg");
+
+    const attempt = async (password, silent) => {
+      try {
+        const result = await decryptPayload(payload, password);
+        localStorage.setItem(LOCK_KEY, password);
+        overlay.classList.add("hidden");
+        resolve(result);
+        return true;
+      } catch {
+        localStorage.removeItem(LOCK_KEY);
+        if (!silent) {
+          msg.textContent = "Falsches Passwort";
+          input.value = "";
+          input.focus();
+        }
+        return false;
+      }
+    };
+
+    const saved = localStorage.getItem(LOCK_KEY);
+    const showPrompt = () => {
+      overlay.classList.remove("hidden");
+      input.focus();
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        if (input.value) attempt(input.value, false);
+      };
+    };
+
+    if (saved) {
+      attempt(saved, true).then((ok) => { if (!ok) showPrompt(); });
+    } else {
+      showPrompt();
+    }
+  });
+}
+
 // ---------------------------------------------------------------- ToDo-Board
 function todoHTML(t, catName) {
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -215,6 +324,7 @@ async function loadTodos() {
 function renderAll() {
   renderHeader();
   renderTimetable();
+  renderCalendar();
   renderTasks();
 }
 
@@ -225,25 +335,36 @@ function setView(v) {
   renderTimetable();
 }
 
+function setCalView(v) {
+  calView = v;
+  $("#btn-cal-today").classList.toggle("active", v === "today");
+  $("#btn-cal-week").classList.toggle("active", v === "week");
+  renderCalendar();
+}
+
 $("#btn-today").addEventListener("click", () => setView("today"));
 $("#btn-week").addEventListener("click", () => setView("week"));
+$("#btn-cal-today").addEventListener("click", () => setCalView("today"));
+$("#btn-cal-week").addEventListener("click", () => setCalView("week"));
 
 async function load() {
   try {
     const resp = await fetch("data/data.json?t=" + Date.now());
     if (!resp.ok) throw new Error("HTTP " + resp.status);
-    data = await resp.json();
+    const payload = await resp.json();
+    data = payload.encrypted ? await unlock(payload) : payload;
   } catch (err) {
     data = {
       demo: false,
       untis: { error: "data.json fehlt (" + err.message + ")", days: [] },
       iserv: { error: "data.json fehlt", tasks: [] },
+      calendar: { error: "data.json fehlt", events: [] },
     };
   }
   renderAll();
+  loadTodos(); // erst nach dem Entsperren laden
 }
 
 load();
-loadTodos();
 // Alle 10 Minuten neu laden (falls die Seite offen bleibt)
-setInterval(() => { load(); loadTodos(); }, 10 * 60 * 1000);
+setInterval(load, 10 * 60 * 1000);

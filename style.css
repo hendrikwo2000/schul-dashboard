@@ -245,3 +245,87 @@ main {
 
 footer { margin-top: 20px; text-align: center; }
 footer a { color: var(--muted); }
+
+/* ---------- Passwort-Sperre ---------- */
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.lock.hidden { display: none; }
+
+.lock-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, 90vw);
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  text-align: center;
+}
+
+.lock-icon { font-size: 2rem; }
+.lock-box h2 { margin: 0; font-size: 1.15rem; }
+.lock-box p { margin: 0; }
+
+.lock-box input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.lock-box button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lock-msg { min-height: 1.2em; font-size: 0.85rem; color: var(--red); }
+
+/* ---------- Termine ---------- */
+.event {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  margin: 4px 0;
+  background: var(--bg);
+}
+
+.event .time {
+  min-width: 88px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.event .what { flex: 1; min-width: 0; }
+.event .title { font-weight: 600; font-size: 0.95rem; }
+.event .detail { font-size: 0.8rem; color: var(--muted); }
+
+.event .allday {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}

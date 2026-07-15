@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Abhängigkeiten installieren
-        run: pip install requests beautifulsoup4 tzdata
+        run: pip install requests beautifulsoup4 tzdata icalendar recurring-ical-events cryptography
 
       - name: Daten abrufen
         env:
@@ -32,6 +32,8 @@ jobs:
           UNTIS_PASS: ${{ secrets.UNTIS_PASS }}
           ISERV_USER: ${{ secrets.ISERV_USER }}
           ISERV_PASS: ${{ secrets.ISERV_PASS }}
+          ICAL_URL: ${{ secrets.ICAL_URL }}
+          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
         run: python scripts/fetch_data.py
 
       - name: Änderungen committen

@@ -25,8 +25,20 @@ Die Zugangsdaten liegen **nur** in GitHub Secrets — nie im Code oder Repo.
    |---|---|
    | `UNTIS_USER` | dein WebUntis-Benutzername |
    | `UNTIS_PASS` | dein WebUntis-Passwort |
-   | `ISERV_USER` | dein IServ-Benutzername (meist `vorname.nachname`) |
+   | `ISERV_USER` | dein IServ-Benutzername (meist `vorname.nachname`, kleingeschrieben) |
    | `ISERV_PASS` | dein IServ-Passwort |
+   | `ICAL_URL` | geheime iCal-Adresse deines Google Kalenders (optional) |
+   | `DASHBOARD_PASS` | Passwort (8+ Zeichen), mit dem die Daten verschlüsselt werden (optional) |
+
+   Die iCal-Adresse findest du in Google Kalender (Web): *Einstellungen →
+   [dein Kalender] → Kalender integrieren → „Privatadresse im iCal-Format"*.
+
+   Ist `DASHBOARD_PASS` gesetzt, wird die komplette `data.json` mit
+   AES-256-GCM verschlüsselt (Schlüssel per PBKDF2 aus dem Passwort). Die
+   Seite fragt das Passwort beim ersten Öffnen ab und merkt es sich im
+   localStorage des Geräts. Ohne `DASHBOARD_PASS` bleibt alles unverschlüsselt
+   öffentlich — der Kalender wird dann aus Datenschutzgründen **nicht**
+   abgerufen.
 3. **GitHub Pages aktivieren:** *Settings → Pages → Source: Deploy from a
    branch → Branch: `main`, Ordner `/ (root)`*.
 4. **Action einmal von Hand starten:** *Actions → „Daten aktualisieren" →

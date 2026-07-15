@@ -283,6 +283,63 @@ def fetch_iserv(user, password):
     return tasks, debug
 
 
+# -------------------------------------------------------- Google Kalender
+
+def fetch_calendar(ics_url):
+    """Termine von heute bis in 7 Tagen aus der geheimen iCal-Adresse."""
+    import icalendar
+    import recurring_ical_events
+
+    resp = requests.get(ics_url, timeout=30)
+    resp.raise_for_status()
+    cal = icalendar.Calendar.from_ical(resp.content)
+
+    start = dt.datetime.now(TZ).date()
+    end = start + dt.timedelta(days=8)
+
+    events = []
+    for ev in recurring_ical_events.of(cal).between(start, end):
+        dtstart = ev.get("DTSTART").dt
+        dtend = ev.get("DTEND").dt if ev.get("DTEND") else None
+        allday = not isinstance(dtstart, dt.datetime)
+        if allday:
+            date, s, e = dtstart.isoformat(), "", ""
+        else:
+            local = dtstart.astimezone(TZ)
+            date, s = local.date().isoformat(), local.strftime("%H:%M")
+            e = dtend.astimezone(TZ).strftime("%H:%M") if isinstance(dtend, dt.datetime) else ""
+        events.append({
+            "date": date, "start": s, "end": e, "allday": allday,
+            "title": str(ev.get("SUMMARY", "")),
+            "location": str(ev.get("LOCATION", "") or ""),
+        })
+
+    events.sort(key=lambda x: (x["date"], x["start"]))
+    return events
+
+
+# --------------------------------------------------------- Verschluesselung
+
+def encrypt_payload(data, password):
+    """Gesamten Datensatz mit AES-256-GCM verschluesseln (Schluessel per
+    PBKDF2 aus dem Passwort). Das Dashboard entschluesselt im Browser."""
+    import base64
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    iterations = 250_000
+    salt, iv = os.urandom(16), os.urandom(12)
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
+                     iterations=iterations).derive(password.encode("utf-8"))
+    ciphertext = AESGCM(key).encrypt(
+        iv, json.dumps(data, ensure_ascii=False).encode("utf-8"), None)
+
+    b64 = lambda b: base64.b64encode(b).decode()  # noqa: E731
+    return {"encrypted": True, "v": 1, "iterations": iterations,
+            "salt": b64(salt), "iv": b64(iv), "data": b64(ciphertext)}
+
+
 # ------------------------------------------------------------------- main
 
 def main():
@@ -291,6 +348,7 @@ def main():
         "demo": False,
         "untis": {"ok": False, "error": None, "days": []},
         "iserv": {"ok": False, "error": None, "tasks": []},
+        "calendar": {"ok": False, "error": None, "events": []},
     }
 
     untis_user = os.environ.get("UNTIS_USER")
@@ -317,12 +375,30 @@ def main():
     else:
         data["iserv"]["error"] = "ISERV_USER/ISERV_PASS nicht gesetzt"
 
+    password = os.environ.get("DASHBOARD_PASS")
+    ics_url = os.environ.get("ICAL_URL")
+    if ics_url and not password:
+        # Sicherheitsnetz: private Termine niemals unverschluesselt ins Repo
+        data["calendar"]["error"] = "DASHBOARD_PASS nicht gesetzt - Kalender wird nicht unverschluesselt veroeffentlicht"
+    elif ics_url:
+        try:
+            data["calendar"]["events"] = fetch_calendar(ics_url)
+            data["calendar"]["ok"] = True
+        except Exception as exc:  # noqa: BLE001
+            data["calendar"]["error"] = str(exc)
+            print(f"Kalender-Fehler: {exc}", file=sys.stderr)
+    else:
+        data["calendar"]["error"] = "ICAL_URL nicht gesetzt"
+
+    out = encrypt_payload(data, password) if password else data
+
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OUT_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+    OUT_FILE.write_text(json.dumps(out, ensure_ascii=False, indent=2),
                         encoding="utf-8")
-    print(f"Geschrieben: {OUT_FILE}")
+    print(f"Geschrieben: {OUT_FILE} ({'verschluesselt' if password else 'unverschluesselt'})")
     print(f"  WebUntis: {'OK' if data['untis']['ok'] else data['untis']['error']}")
     print(f"  IServ:    {'OK' if data['iserv']['ok'] else data['iserv']['error']}")
+    print(f"  Kalender: {'OK, ' + str(len(data['calendar']['events'])) + ' Termine' if data['calendar']['ok'] else data['calendar']['error']}")
 
 
 if __name__ == "__main__":
