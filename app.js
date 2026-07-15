@@ -7,6 +7,10 @@ const CONFIG = {
   iservUrl: "https://bea-portal.de/iserv/exercise",
   untisUrl: "https://hh5910.webuntis.com/WebUntis/?school=hh5910",
   repoUrl: "https://github.com/hendrikwo2000/schul-dashboard",
+  // ToDo-Board (JSONBin-Cloud der ToDo-App; Key ist bewusst nur für dieses Bin gültig)
+  jsonbinUrl: "https://api.jsonbin.io/v3/b/6a4bf236da38895dfe36c173/latest",
+  jsonbinKey: "$2a$10$BGeFi/PYFCLdZs0Bzu8PHeijV91l8JX.izcEgvuptBkIeXwePMKSu",
+  todoCategories: ["Schule", "Facharbeit"],
 };
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -152,6 +156,61 @@ function renderTasks() {
   el.innerHTML = open.map(taskHTML).join("");
 }
 
+// ---------------------------------------------------------------- ToDo-Board
+function todoHTML(t, catName) {
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const due = t.due ? new Date(t.due + "T00:00") : null;
+  const daysLeft = due
+    ? Math.round((startOfDay(due) - startOfDay(new Date())) / MS_DAY)
+    : null;
+
+  let color = "green";
+  let label = "ohne Termin";
+  if (due) {
+    if (daysLeft < 0) { color = "red"; label = "überfällig"; }
+    else if (daysLeft === 0) { color = "red"; label = "heute"; }
+    else if (daysLeft === 1) { color = "red"; label = "morgen"; }
+    else if (daysLeft <= 3) { color = "yellow"; label = `${daysLeft} Tage`; }
+    else { color = "green"; label = `${daysLeft} Tage`; }
+  }
+
+  const sub = [catName, due ? due.toLocaleDateString("de-DE") : null, t.note]
+    .filter(Boolean).join(" · ");
+
+  return `
+    <a class="task" href="${esc(CONFIG.todoAppUrl)}" target="_blank" rel="noopener">
+      <span class="dot ${color}"></span>
+      <span class="what">
+        <div class="title">${esc(t.text)}</div>
+        <div class="due">${esc(sub)}</div>
+      </span>
+      <span class="left ${color}">${esc(label)}</span>
+    </a>`;
+}
+
+async function loadTodos() {
+  const el = $("#todos");
+  try {
+    const resp = await fetch(CONFIG.jsonbinUrl, {
+      headers: { "X-Access-Key": CONFIG.jsonbinKey },
+      cache: "no-store",
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const record = (await resp.json()).record || {};
+    const wanted = new Map((record.categories || [])
+      .filter((c) => CONFIG.todoCategories.includes(c.name))
+      .map((c) => [c.id, c.name]));
+    const open = (record.todos || [])
+      .filter((t) => !t.done && wanted.has(t.categoryId))
+      .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+    el.innerHTML = open.length
+      ? open.map((t) => todoHTML(t, wanted.get(t.categoryId))).join("")
+      : '<div class="empty">Keine offenen ToDos 🎉</div>';
+  } catch (err) {
+    el.innerHTML = `<div class="error">ToDo-Board nicht erreichbar: ${esc(err.message)}</div>`;
+  }
+}
+
 // ---------------------------------------------------------------- Start
 function renderAll() {
   renderHeader();
@@ -185,5 +244,6 @@ async function load() {
 }
 
 load();
+loadTodos();
 // Alle 10 Minuten neu laden (falls die Seite offen bleibt)
-setInterval(load, 10 * 60 * 1000);
+setInterval(() => { load(); loadTodos(); }, 10 * 60 * 1000);

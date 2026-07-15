@@ -104,6 +104,8 @@ main {
   main { grid-template-columns: 1fr; }
 }
 
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);

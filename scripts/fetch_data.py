@@ -83,9 +83,23 @@ def fetch_untis(user, password):
         "showInfo": True,
         "subjectFields": ["name", "longname"],
         "roomFields": ["name"],
-        "teacherFields": ["name", "longname"],
+        "teacherFields": ["id", "name", "longname"],
         "klasseFields": ["name"],
     }})
+
+    # Manche Schulen liefern im Stundenplan nur Lehrer-IDs ohne Namen ->
+    # Namen ueber getTeachers nachschlagen (falls fuer Schueler erlaubt).
+    def t_name(t):
+        return t.get("longname") or t.get("name") or ""
+
+    teacher_map = {}
+    if any(not t_name(t) for lesson in result or [] for t in lesson.get("te") or []):
+        try:
+            for t in untis_rpc(session, "getTeachers", {}):
+                teacher_map[t["id"]] = (" ".join(filter(None, [t.get("foreName"), t.get("longName")]))
+                                        or t.get("name", ""))
+        except Exception as exc:
+            print(f"WebUntis getTeachers nicht verfuegbar: {exc}", file=sys.stderr)
 
     try:
         untis_rpc(session, "logout", {})
@@ -106,7 +120,8 @@ def fetch_untis(user, password):
             "subject": (subjects[0].get("longname") or subjects[0].get("name")) if subjects else "?",
             "subjectShort": subjects[0].get("name") if subjects else "?",
             "room": ", ".join(r.get("name", "") for r in rooms),
-            "teacher": ", ".join(t.get("longname") or t.get("name", "") for t in teachers),
+            "teacher": ", ".join(filter(None, (
+                t_name(t) or teacher_map.get(t.get("id"), "") for t in teachers))),
             "code": lesson.get("code", ""),  # "" | "cancelled" | "irregular"
             "info": info.strip(),
         })
@@ -147,6 +162,7 @@ def fetch_iserv(user, password):
     if "/auth/login" in resp.url or 'name="_password"' in resp.text:
         raise RuntimeError("IServ-Login fehlgeschlagen (Benutzername/Passwort pruefen)")
 
+    link_re = re.compile(r"exercise/show/\d+")
     resp = session.get(
         f"{ISERV_BASE}/iserv/exercise",
         params={"filter[status]": "current"},
@@ -154,18 +170,31 @@ def fetch_iserv(user, password):
     )
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
+    links = soup.find_all("a", href=link_re)
+    if not links:
+        # Fallback: Liste ohne Filter versuchen
+        resp = session.get(f"{ISERV_BASE}/iserv/exercise", timeout=30)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        links = soup.find_all("a", href=link_re)
+    title = soup.title.get_text(strip=True) if soup.title else "?"
+    print(f"IServ: {len(links)} Aufgaben-Links auf '{title}' ({resp.url})",
+          file=sys.stderr)
 
-    tasks = []
-    for row in soup.select("table tbody tr"):
-        link = row.find("a", href=re.compile(r"/iserv/exercise/show/\d+"))
-        if not link:
+    tasks, seen = [], set()
+    for link in links:
+        url = requests.compat.urljoin(ISERV_BASE, link["href"])
+        name = link.get_text(strip=True)
+        if url in seen or not name:
             continue
-        cells = [c.get_text(" ", strip=True) for c in row.find_all("td")]
+        seen.add(url)
+        row = link.find_parent("tr")
+        cells = [c.get_text(" ", strip=True) for c in row.find_all("td")] if row else []
         dates = [d for d in (parse_iserv_date(c) for c in cells) if d]
         row_text = " ".join(cells).lower()
         tasks.append({
-            "title": link.get_text(strip=True),
-            "url": requests.compat.urljoin(ISERV_BASE, link["href"]),
+            "title": name,
+            "url": url,
             "start": dates[0] if len(dates) > 1 else None,
             "due": dates[-1] if dates else None,
             "done": "erledigt" in row_text or "abgegeben" in row_text,
