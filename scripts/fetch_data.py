@@ -6,12 +6,14 @@ Zugangsdaten kommen aus Umgebungsvariablen (lokal oder GitHub Secrets):
   ISERV_USER, ISERV_PASS   - IServ-Login (bea-portal.de)
 """
 
+import base64
 import datetime as dt
 import json
 import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 import requests
@@ -285,36 +287,109 @@ def fetch_iserv(user, password):
 
 # -------------------------------------------------------- Google Kalender
 
+def google_calendar_id(ics_url):
+    """Kalender-ID aus der geheimen iCal-Adresse ziehen.
+
+    .../calendar/ical/<kalender-id>/private-<key>/basic.ics
+    """
+    m = re.search(r"/calendar/ical/([^/]+)/", ics_url or "")
+    return unquote(m.group(1)) if m else None
+
+
+def google_event_url(ev, calendar_id, day, recurring_uids):
+    """Link zum einzelnen Termin im Google Kalender.
+
+    Google adressiert Termine ueber die "eid": base64 aus "<Termin-ID> <Kalender-ID>".
+    Die Termin-ID steckt in der UID der iCal-Datei (vor dem @). Nur bei Terminen
+    aus einer Serie haengt Google den Zeitstempel der Wiederholung mit "_" an --
+    bei Einzelterminen wuerde ein Zeitstempel den Link kaputt machen. Achtung:
+    recurring_ical_events setzt RECURRENCE-ID auf jedes Vorkommen, auch auf
+    Einzeltermine; welche UID wirklich eine Serie ist, steht in recurring_uids.
+    Ohne UID oder Kalender-ID gibt es keinen sicheren Link -> Tagesansicht.
+    """
+    day_url = f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
+
+    uid = str(ev.get("UID", "") or "")
+    event_id = uid.split("@")[0].strip()
+    if not event_id or not calendar_id:
+        return day_url
+
+    recur = ev.get("RECURRENCE-ID") if uid in recurring_uids else None
+    if recur is not None:
+        rid = recur.dt
+        if isinstance(rid, dt.datetime):
+            if rid.tzinfo is None:
+                rid = rid.replace(tzinfo=TZ)
+            stamp = rid.astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        else:
+            stamp = rid.strftime("%Y%m%d")
+        event_id = f"{event_id}_{stamp}"
+
+    eid = base64.urlsafe_b64encode(
+        f"{event_id} {calendar_id}".encode("utf-8")).decode().rstrip("=")
+    return f"https://calendar.google.com/calendar/u/0/r/eventedit/{eid}"
+
+
 def fetch_calendar(ics_url):
-    """Termine von heute bis in 7 Tagen aus der geheimen iCal-Adresse."""
+    """Termine von heute bis in 7 Tagen aus der geheimen iCal-Adresse.
+
+    Mehrtaegige Termine (z.B. Ferien) werden auf einzelne Tage aufgeteilt,
+    damit sie an jedem betroffenen Tag auftauchen und nicht nur am ersten.
+    """
     import icalendar
     import recurring_ical_events
 
     resp = requests.get(ics_url, timeout=30)
     resp.raise_for_status()
     cal = icalendar.Calendar.from_ical(resp.content)
+    calendar_id = google_calendar_id(ics_url)
+    recurring_uids = {str(c.get("UID", "")) for c in cal.walk("VEVENT") if c.get("RRULE")}
 
-    start = dt.datetime.now(TZ).date()
-    end = start + dt.timedelta(days=8)
+    first_day = dt.datetime.now(TZ).date()
+    last_day = first_day + dt.timedelta(days=7)
 
     events = []
-    for ev in recurring_ical_events.of(cal).between(start, end):
+    for ev in recurring_ical_events.of(cal).between(first_day, last_day + dt.timedelta(days=1)):
         dtstart = ev.get("DTSTART").dt
         dtend = ev.get("DTEND").dt if ev.get("DTEND") else None
         allday = not isinstance(dtstart, dt.datetime)
-        if allday:
-            date, s, e = dtstart.isoformat(), "", ""
-        else:
-            local = dtstart.astimezone(TZ)
-            date, s = local.date().isoformat(), local.strftime("%H:%M")
-            e = dtend.astimezone(TZ).strftime("%H:%M") if isinstance(dtend, dt.datetime) else ""
-        events.append({
-            "date": date, "start": s, "end": e, "allday": allday,
-            "title": str(ev.get("SUMMARY", "")),
-            "location": str(ev.get("LOCATION", "") or ""),
-        })
 
-    events.sort(key=lambda x: (x["date"], x["start"]))
+        if allday:
+            starts_on = dtstart
+            # DTEND ist bei ganztaegigen Terminen exklusiv (Tag NACH dem letzten)
+            ends_on = (dtend - dt.timedelta(days=1)) if dtend else starts_on
+            start_str = end_str = ""
+        else:
+            local_start = dtstart.astimezone(TZ)
+            local_end = dtend.astimezone(TZ) if isinstance(dtend, dt.datetime) else None
+            starts_on = local_start.date()
+            ends_on = local_end.date() if local_end else starts_on
+            # Ein Termin, der um Mitternacht endet, gehoert noch zum Vortag
+            if local_end and local_end.time() == dt.time(0, 0) and ends_on > starts_on:
+                ends_on -= dt.timedelta(days=1)
+            start_str = local_start.strftime("%H:%M")
+            end_str = local_end.strftime("%H:%M") if local_end else ""
+
+        if ends_on < starts_on:
+            ends_on = starts_on
+        span = (ends_on - starts_on).days + 1
+
+        day = max(starts_on, first_day)
+        while day <= min(ends_on, last_day):
+            events.append({
+                "date": day.isoformat(),
+                # Uhrzeiten nur am tatsaechlichen Anfangs-/Endtag zeigen
+                "start": start_str if day == starts_on else "",
+                "end": end_str if day == ends_on else "",
+                "allday": allday,
+                "title": str(ev.get("SUMMARY", "")),
+                "location": str(ev.get("LOCATION", "") or ""),
+                "url": google_event_url(ev, calendar_id, day, recurring_uids),
+                "until": ends_on.isoformat() if span > 1 else None,
+            })
+            day += dt.timedelta(days=1)
+
+    events.sort(key=lambda x: (x["date"], x["start"] or "", x["title"]))
     return events
 
 

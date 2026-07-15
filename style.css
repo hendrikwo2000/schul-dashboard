@@ -47,6 +47,11 @@ body {
 
 header h1 { margin: 0; font-size: 1.5rem; }
 
+/* Auf schmalen Handys sonst zweizeilig ("Schönes Wochenende, Hendrik") */
+@media (max-width: 480px) {
+  header h1 { font-size: 1.25rem; }
+}
+
 .header-row {
   display: flex;
   align-items: center;
@@ -56,18 +61,6 @@ header h1 { margin: 0; font-size: 1.5rem; }
 }
 
 .header-links { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.header-links a {
-  display: inline-block;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.header-links a:hover { filter: brightness(0.95); }
 
 .theme-btn {
   padding: 6px 12px;
@@ -81,15 +74,8 @@ header h1 { margin: 0; font-size: 1.5rem; }
   cursor: pointer;
 }
 .theme-btn:hover { filter: brightness(0.95); }
-
-.header-sub {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 6px 0 0;
-  font-size: 0.9rem;
-}
+.theme-btn:disabled { opacity: 0.45; cursor: default; }
+.theme-btn:disabled:hover { filter: none; }
 
 .banner {
   margin-top: 10px;
@@ -266,9 +252,6 @@ main {
   font-size: 0.85rem;
 }
 
-footer { margin-top: 20px; text-align: center; }
-footer a { color: var(--muted); }
-
 /* ---------- Passwort-Sperre ---------- */
 .lock {
   position: fixed;
@@ -330,7 +313,11 @@ footer a { color: var(--muted); }
   border-radius: 10px;
   margin: 4px 0;
   background: var(--bg);
+  text-decoration: none;
+  color: inherit;
 }
+
+a.event:hover { outline: 2px solid var(--accent-soft); }
 
 .event .time {
   min-width: 88px;

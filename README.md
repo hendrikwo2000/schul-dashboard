@@ -1,18 +1,23 @@
 # Schul-Dashboard
 
-Zeigt den heutigen Stundenplan (WebUntis, BS 22 / BEA Hamburg) und offene
-Aufgaben (IServ, bea-portal.de) auf einer Seite — gehostet über GitHub Pages.
+Zeigt den heutigen Stundenplan (WebUntis, BS 22 / BEA Hamburg), Termine
+(Google Kalender) und offene Aufgaben (IServ, bea-portal.de) auf einer Seite —
+gehostet über GitHub Pages. Ein Klick auf 🔊 liest den Tag vor.
 
 ## Wie es funktioniert
 
 ```
-GitHub Action (werktags alle 30 Min.)
+GitHub Action (täglich alle 30 Min., 6–22 Uhr)
   └─ scripts/fetch_data.py
        ├─ WebUntis-API  → Stundenplan der Woche
        ├─ IServ-Login   → offene Aufgaben
+       ├─ iCal-Feed     → Termine der nächsten 7 Tage
        └─ schreibt data/data.json
 GitHub Pages zeigt index.html, die data.json anzeigt.
 ```
+
+Das ToDo-Board holt die Seite direkt im Browser aus der JSONBin-Cloud, es
+läuft also nicht über die Action.
 
 Die Zugangsdaten liegen **nur** in GitHub Secrets — nie im Code oder Repo.
 
@@ -42,21 +47,25 @@ Die Zugangsdaten liegen **nur** in GitHub Secrets — nie im Code oder Repo.
 3. **GitHub Pages aktivieren:** *Settings → Pages → Source: Deploy from a
    branch → Branch: `main`, Ordner `/ (root)`*.
 4. **Action einmal von Hand starten:** *Actions → „Daten aktualisieren" →
-   Run workflow*. Danach läuft sie werktags 6–18 Uhr alle 30 Minuten von selbst.
+   Run workflow*. Danach läuft sie täglich 6–22 Uhr alle 30 Minuten von selbst.
+   GitHub startet Cron-Jobs bei Last auch mal 5–20 Minuten später oder lässt
+   einen Lauf aus — sind die Daten älter als 3 Stunden, warnt das Dashboard.
 
 Fertig — das Dashboard ist unter `https://<benutzername>.github.io/<repo>/` erreichbar.
 
 ## Anpassen
 
+- **Name in der Begrüßung:** in `app.js` oben bei `CONFIG.name`.
 - **ToDo-App verlinken:** in `app.js` oben bei `CONFIG.todoAppUrl` die URL eintragen.
 - **Zeitplan ändern:** Cron-Zeile in `.github/workflows/update.yml`
   (Achtung: Zeiten dort sind UTC, also 1–2 Std. hinter deutscher Zeit).
+- **Warnschwelle für alte Daten:** `CONFIG.staleHours` in `app.js`.
 
 ## Lokal testen
 
 ```
 set UNTIS_USER=... & set UNTIS_PASS=... & set ISERV_USER=... & set ISERV_PASS=...
-pip install requests beautifulsoup4 tzdata
+pip install requests beautifulsoup4 tzdata icalendar recurring-ical-events cryptography
 python scripts/fetch_data.py
 python -m http.server 8899
 ```

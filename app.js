@@ -2,19 +2,16 @@
 
 // ------------------------------------------------------------- Einstellungen
 const CONFIG = {
+  // Name für die Begrüßung und die Sprachausgabe
+  name: "Hendrik",
   // Link zu deiner ToDo-App (GitHub-Pages-URL eintragen, leer = Kachel ausblenden)
   todoAppUrl: "https://hendrikwo2000.github.io/todo-app/",
-  iservUrl: "https://bea-portal.de/iserv/exercise",
-  iservApp: "iserv://",
-  iservPackage: "eu.iserv.webapp",
-  untisUrl: "https://hh5910.webuntis.com/WebUntis/?school=hh5910",
-  untisApp: "untis://",
-  untisPackage: "com.grupet.web.app",
-  repoUrl: "https://github.com/hendrikwo2000/schul-dashboard",
   // ToDo-Board (JSONBin-Cloud der ToDo-App; Key ist bewusst nur für dieses Bin gültig)
   jsonbinUrl: "https://api.jsonbin.io/v3/b/6a4bf236da38895dfe36c173/latest",
   jsonbinKey: "$2a$10$BGeFi/PYFCLdZs0Bzu8PHeijV91l8JX.izcEgvuptBkIeXwePMKSu",
   todoCategories: ["Schule", "Facharbeit"],
+  // Ab diesem Alter der Daten warnt das Dashboard (die Action läuft alle 30 Min.)
+  staleHours: 3,
 };
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -23,6 +20,7 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 let data = null;
 let view = "today";
 let calView = "today";
+let todos = []; // vom ToDo-Board, wird auch vorgelesen
 
 // ---------------------------------------------------------------- Hilfen
 const $ = (sel) => document.querySelector(sel);
@@ -89,32 +87,67 @@ function todayISO() {
   return new Date().toLocaleDateString("sv-SE"); // yyyy-mm-dd, lokale Zeit
 }
 
+// Datum in n Tagen als yyyy-mm-dd (n darf negativ sein)
+function isoIn(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString("sv-SE");
+}
+
 function fmtDate(iso) {
   const d = new Date(iso + "T00:00");
   return `${WEEKDAYS[d.getDay()]}, ${d.toLocaleDateString("de-DE")}`;
 }
 
+function fmtShort(iso) {
+  return new Date(iso + "T00:00")
+    .toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// Ganze Tage bis zum Termin: 0 = heute, 1 = morgen, negativ = vorbei
+function daysUntil(due) {
+  return Math.round((startOfDay(due) - startOfDay(new Date())) / MS_DAY);
+}
+
 // ---------------------------------------------------------------- Kopf
-function renderHeader() {
-  $("#today-label").textContent = fmtDate(todayISO());
+function greeting() {
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
+  if (day === 0 || day === 6) return { emoji: "🎉", text: `Schönes Wochenende, ${CONFIG.name}` };
+  if (hour < 11) return { emoji: "🌅", text: `Guten Morgen, ${CONFIG.name}` };
+  if (hour < 14) return { emoji: "☀️", text: `Guten Mittag, ${CONFIG.name}` };
+  if (hour < 18) return { emoji: "🌇", text: `Guten Nachmittag, ${CONFIG.name}` };
+  return { emoji: "🌙", text: `Guten Abend, ${CONFIG.name}` };
+}
 
-  if (data?.updated) {
-    const upd = new Date(data.updated);
-    $("#updated-label").textContent =
-      "Stand: " + upd.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+// Nur melden, wenn die Action offenbar hängt - sonst bleibt der Kopf leer.
+function renderStale() {
+  const el = $("#stale-banner");
+  const hours = data?.updated
+    ? Math.floor((Date.now() - new Date(data.updated).getTime()) / 3600000)
+    : null;
+
+  if (hours === null || Number.isNaN(hours) || hours < CONFIG.staleHours) {
+    el.classList.add("hidden");
+    return;
   }
+  const age = hours < 24
+    ? `${hours} Stunden`
+    : Math.floor(hours / 24) === 1 ? "einen Tag" : `${Math.floor(hours / 24)} Tage`;
+  el.textContent = `⚠️ Die Daten sind ${age} alt — die Aktualisierung läuft gerade nicht.`;
+  el.classList.remove("hidden");
+}
 
+function renderHeader() {
+  const g = greeting();
+  $("#greeting").textContent = `${g.emoji} ${g.text}`;
+  renderStale();
   $("#demo-banner").classList.toggle("hidden", !data?.demo);
-
-  const links = [];
-  if (CONFIG.todoAppUrl) links.push(`<a href="${esc(CONFIG.todoAppUrl)}" target="_blank" rel="noopener">✅ ToDo-Board</a>`);
-  links.push(`<a href="${esc(CONFIG.iservUrl)}" data-app="${esc(CONFIG.iservApp)}" data-package="${esc(CONFIG.iservPackage)}" target="_blank" rel="noopener">🏫 IServ</a>`);
-  links.push(`<a href="${esc(CONFIG.untisUrl)}" data-app="${esc(CONFIG.untisApp)}" data-package="${esc(CONFIG.untisPackage)}" target="_blank" rel="noopener">📅 WebUntis</a>`);
-  $("#header-links").innerHTML = links.join("");
-  bindAppLinks();
-
-  if (CONFIG.repoUrl) $("#repo-link").href = CONFIG.repoUrl;
-  else $("#repo-link").parentElement.lastElementChild.style.display = "none";
 }
 
 // ---------------------------------------------------------------- Stundenplan
@@ -164,11 +197,8 @@ function renderTimetable() {
 
 // ---------------------------------------------------------------- Aufgaben
 function taskHTML(t) {
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const due = t.due ? new Date(t.due) : null;
-  const daysLeft = due
-    ? Math.round((startOfDay(due) - startOfDay(new Date())) / MS_DAY)
-    : null;
+  const daysLeft = due ? daysUntil(due) : null;
 
   let color = "green";
   let label = "ohne Frist";
@@ -216,16 +246,23 @@ function renderTasks() {
 
 // ---------------------------------------------------------------- Termine
 function eventHTML(ev) {
-  const time = ev.allday ? "" : `${ev.start}${ev.end ? "–" + ev.end : ""}`;
-  return `
-    <div class="event">
+  const time = ev.allday ? "" : `${ev.start || ""}${ev.end ? "–" + ev.end : ""}`;
+  const badge =
+    ev.until ? `<span class="allday">bis ${esc(fmtShort(ev.until))}</span>` :
+    ev.allday ? '<span class="allday">Ganztägig</span>' : "";
+
+  const inner = `
       <div class="time">${esc(time)}</div>
       <div class="what">
         <div class="title">${esc(ev.title)}</div>
         ${ev.location ? `<div class="detail">📍 ${esc(ev.location)}</div>` : ""}
       </div>
-      ${ev.allday ? '<span class="allday">Ganztägig</span>' : ""}
-    </div>`;
+      ${badge}`;
+
+  // Ohne erkennbare Termin-ID liefert das Script keine URL -> nicht verlinken
+  return ev.url
+    ? `<a class="event" href="${esc(ev.url)}" target="_blank" rel="noopener">${inner}</a>`
+    : `<div class="event">${inner}</div>`;
 }
 
 function renderCalendar() {
@@ -324,11 +361,8 @@ function unlock(payload) {
 
 // ---------------------------------------------------------------- ToDo-Board
 function todoHTML(t, catName) {
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const due = t.due ? new Date(t.due + "T00:00") : null;
-  const daysLeft = due
-    ? Math.round((startOfDay(due) - startOfDay(new Date())) / MS_DAY)
-    : null;
+  const daysLeft = due ? daysUntil(due) : null;
 
   let color = "green";
   let label = "ohne Termin";
@@ -369,12 +403,157 @@ async function loadTodos() {
     const open = (record.todos || [])
       .filter((t) => !t.done && wanted.has(t.categoryId))
       .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+    todos = open;
     el.innerHTML = open.length
       ? open.map((t) => todoHTML(t, wanted.get(t.categoryId))).join("")
       : '<div class="empty">Keine offenen ToDos 🎉</div>';
   } catch (err) {
+    todos = [];
     el.innerHTML = `<div class="error">ToDo-Board nicht erreichbar: ${esc(err.message)}</div>`;
   }
+}
+
+// ---------------------------------------------------------------- Vorlesen
+// "08:00" -> "8 Uhr", "08:45" -> "8 Uhr 45" (sonst buchstabiert die Stimme
+// die Ziffern einzeln vor)
+function sayTime(hhmm) {
+  const [h, m] = String(hhmm || "").split(":").map(Number);
+  if (!Number.isFinite(h)) return "";
+  return m ? `${h} Uhr ${m}` : `${h} Uhr`;
+}
+
+function joinList(items) {
+  if (items.length < 2) return items.join("");
+  return items.slice(0, -1).join(", ") + " und " + items[items.length - 1];
+}
+
+// Termine/Aufgaben nach Fälligkeit einsortieren
+function byDue(items, getDue) {
+  const out = { over: [], today: [], tomorrow: [] };
+  for (const item of items) {
+    const due = getDue(item);
+    if (!due) continue;
+    const left = daysUntil(due);
+    if (left < 0) out.over.push(item);
+    else if (left === 0) out.today.push(item);
+    else if (left === 1) out.tomorrow.push(item);
+  }
+  return out;
+}
+
+// Sätze für eine Aufgabenquelle; leere Töpfe werden übersprungen.
+function dueSentences(items, getDue, getTitle, one, many, where) {
+  const b = byDue(items, getDue);
+  const names = (arr) => joinList(arr.map(getTitle));
+  const out = [];
+
+  if (b.over.length) {
+    out.push(b.over.length === 1
+      ? `Achtung: ${one} ${where} ist überfällig: ${names(b.over)}.`
+      : `Achtung: ${b.over.length} ${many} ${where} sind überfällig: ${names(b.over)}.`);
+  }
+  if (b.today.length) out.push(`Heute fällig ${where}: ${names(b.today)}.`);
+  if (b.tomorrow.length) out.push(`Morgen fällig ${where}: ${names(b.tomorrow)}.`);
+  return out;
+}
+
+// Ein Satz pro Eintrag - die Stimme spricht sie als eigene Häppchen, damit
+// Chrome lange Texte nicht mittendrin abschneidet.
+function speechParts() {
+  const parts = [greeting().text + "."];
+  const today = todayISO();
+  const tomorrow = isoIn(1);
+
+  // --- Unterricht heute
+  const lessons = ((data?.untis?.days || []).find((d) => d.date === today)?.lessons || [])
+    .filter((l) => l.code !== "cancelled");
+
+  if (!lessons.length) {
+    parts.push("Heute hast du frei.");
+  } else {
+    const first = lessons[0];
+    parts.push(`Deine erste Stunde ist ${first.subject} um ${sayTime(first.start)}` +
+      (first.room ? `, in Raum ${first.room}` : "") + ".");
+    const feierabend = lessons.map((l) => l.end).sort().pop();
+    parts.push(`Feierabend hast du um ${sayTime(feierabend)}.`);
+  }
+
+  // --- Termine heute und morgen
+  const sayEvent = (ev) =>
+    ev.allday || !ev.start ? ev.title : `${ev.title} um ${sayTime(ev.start)}`;
+  const eventsOn = (iso) => (data?.calendar?.events || []).filter((e) => e.date === iso);
+
+  const evToday = eventsOn(today);
+  const evTomorrow = eventsOn(tomorrow);
+  if (evToday.length) {
+    parts.push(evToday.length === 1
+      ? `Heute steht ein Termin an: ${sayEvent(evToday[0])}.`
+      : `Heute stehen ${evToday.length} Termine an: ${joinList(evToday.map(sayEvent))}.`);
+  }
+  if (evTomorrow.length) {
+    parts.push(evTomorrow.length === 1
+      ? `Morgen hast du einen Termin: ${sayEvent(evTomorrow[0])}.`
+      : `Morgen hast du ${evTomorrow.length} Termine: ${joinList(evTomorrow.map(sayEvent))}.`);
+  }
+
+  // --- Aufgaben und ToDos
+  parts.push(...dueSentences(
+    (data?.iserv?.tasks || []).filter((t) => !t.done),
+    (t) => (t.due ? new Date(t.due) : null), (t) => t.title,
+    "eine Aufgabe", "Aufgaben", "bei IServ"));
+
+  parts.push(...dueSentences(
+    todos,
+    (t) => (t.due ? new Date(t.due + "T00:00") : null), (t) => t.text,
+    "ein ToDo", "ToDos", "auf dem ToDo-Board"));
+
+  return parts;
+}
+
+let voices = [];
+const CAN_SPEAK = "speechSynthesis" in window;
+
+function germanVoice() {
+  return voices.find((v) => v.lang === "de-DE" && v.localService)
+    || voices.find((v) => v.lang === "de-DE")
+    || voices.find((v) => v.lang?.startsWith("de"))
+    || null;
+}
+
+function setSpeakBtn(active) {
+  $("#speak-btn").textContent = active ? "⏹ Stopp" : "🔊 Vorlesen";
+}
+
+function speak() {
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setSpeakBtn(false);
+    return;
+  }
+  const parts = speechParts();
+  const voice = germanVoice();
+  setSpeakBtn(true);
+
+  parts.forEach((text, i) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "de-DE";
+    if (voice) u.voice = voice;
+    u.onerror = () => setSpeakBtn(false);
+    if (i === parts.length - 1) u.onend = () => setSpeakBtn(false);
+    speechSynthesis.speak(u);
+  });
+}
+
+if (CAN_SPEAK) {
+  voices = speechSynthesis.getVoices();
+  speechSynthesis.addEventListener("voiceschanged", () => {
+    voices = speechSynthesis.getVoices();
+  });
+  $("#speak-btn").addEventListener("click", speak);
+  // Ohne das redet der Browser nach dem Verlassen der Seite weiter
+  window.addEventListener("pagehide", () => speechSynthesis.cancel());
+} else {
+  $("#speak-btn").classList.add("hidden");
 }
 
 // ---------------------------------------------------------------- Start
@@ -419,6 +598,7 @@ async function load() {
     };
   }
   renderAll();
+  if (CAN_SPEAK) $("#speak-btn").disabled = false;
   loadTodos(); // erst nach dem Entsperren laden
 }
 

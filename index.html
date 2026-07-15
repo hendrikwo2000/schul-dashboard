@@ -17,16 +17,13 @@
 <body>
   <header>
     <div class="header-row">
-      <h1>📚 Schul-Dashboard</h1>
+      <h1 id="greeting">Hallo Hendrik</h1>
       <div class="header-links">
-        <span id="header-links"></span>
+        <button id="speak-btn" class="theme-btn" title="Tagesüberblick vorlesen" disabled>🔊 Vorlesen</button>
         <button id="theme-btn" class="theme-btn" title="Hell/Dunkel umschalten">☾</button>
       </div>
     </div>
-    <div class="header-sub">
-      <span id="today-label"></span>
-      <span id="updated-label" class="muted"></span>
-    </div>
+    <div id="stale-banner" class="banner hidden"></div>
     <div id="demo-banner" class="banner hidden">
       ⚠️ Demo-Daten — die GitHub-Action hat noch keine echten Daten geladen.
     </div>
@@ -84,11 +81,6 @@
       </section>
     </div>
   </main>
-
-  <footer class="muted small">
-    Aktualisiert sich werktags automatisch alle 30 Minuten ·
-    <a href="https://github.com" id="repo-link" target="_blank" rel="noopener">Quellcode</a>
-  </footer>
 
   <script src="app.js"></script>
 </body>
