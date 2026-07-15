@@ -54,6 +54,26 @@ Die Zugangsdaten liegen **nur** in GitHub Secrets — nie im Code oder Repo.
 
 Fertig — das Dashboard ist unter `https://<benutzername>.github.io/<repo>/` erreichbar.
 
+## Icon
+
+`icon.svg` ist die einzige Quelle. Die übrigen Dateien (`favicon.ico`,
+`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) werden daraus gebaut
+und liegen fertig im Repo — neu bauen nur, wenn sich `icon.svg` ändert:
+
+```
+pip install pymupdf pillow
+python scripts/build_icons.py
+```
+
+Zwei Fallen, die das Script abfängt bzw. die die Datei bewusst meidet:
+`icon.svg` ist **einfarbig**, weil der Renderer keine SVG-Verläufe kann (die
+PNGs sähen sonst anders aus als die SVG). Und der Browser parst SVG **streng
+als XML** — ein Syntaxfehler und das Icon bleibt kommentarlos leer; das Script
+prüft deshalb vor dem Rendern.
+
+Über `site.webmanifest` lässt sich das Dashboard auf dem Handy als App zum
+Startbildschirm hinzufügen.
+
 ## Anpassen
 
 - **Name in der Begrüßung:** in `app.js` oben bei `CONFIG.name`.

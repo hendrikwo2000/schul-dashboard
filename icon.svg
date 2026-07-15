@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Schul-Dashboard">
+  <title>Schul-Dashboard</title>
+
+  <!-- Bewusst einfarbig statt Verlauf: Aus dieser Datei werden auch die PNGs
+       gerendert, und der Renderer (MuPDF) kann keine SVG-Verläufe - mit Verlauf
+       sähen Datei und PNG unterschiedlich aus. Farbe ist der Akzent aus
+       style.css. Vorsicht: In XML-Kommentaren sind zwei Bindestriche
+       hintereinander verboten, der CSS-Variablenname darf hier nicht stehen. -->
+  <rect width="512" height="512" rx="112" fill="#3b6fe0"/>
+
+  <!-- Aufgeschlagenes Buch: linke Seite weiß, rechte leicht abgesetzt, dazwischen
+       der Bund. Bewusst dicke, gerade Formen - alles Feinere wird im 16-Pixel-
+       Favicon zu Matsch. -->
+  <path d="M243 149 C 211 121, 165 108, 105 108 C 88 108, 79 119, 79 136
+           L 79 363 C 79 380, 88 390, 105 390 C 165 390, 211 401, 243 426 Z"
+        fill="#ffffff"/>
+  <path d="M269 149 C 301 121, 347 108, 407 108 C 424 108, 433 119, 433 136
+           L 433 363 C 433 380, 424 390, 407 390 C 347 390, 301 401, 269 426 Z"
+        fill="#d3e1fb"/>
+  <rect x="243" y="149" width="26" height="277" rx="10" fill="#8fb0f7"/>
+
+  <!-- Zeilen auf der linken Seite: deuten Text an, ohne kleinteilig zu werden.
+       Verschwinden unter ~32 px, das ist gewollt. -->
+  <g fill="#9db8f4">
+    <rect x="120" y="179" width="93" height="18" rx="9"/>
+    <rect x="120" y="227" width="93" height="18" rx="9"/>
+    <rect x="120" y="275" width="63" height="18" rx="9"/>
+  </g>
+</svg>

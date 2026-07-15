@@ -293,6 +293,18 @@ def fetch_iserv(user, password):
 
 # -------------------------------------------------------- Google Kalender
 
+# Google kuerzt die Kalender-Domain in der eid auf einen Buchstaben. Gemessen
+# an echten htmlLink-Werten der Calendar-API: gmail.com -> m und
+# group.v.calendar.google.com -> v. Die anderen beiden sind derselbe Bauplan,
+# aber nicht selbst geprueft. Unbekannte Domains bleiben unveraendert.
+EID_DOMAINS = {
+    "gmail.com": "m",                      # geprueft
+    "group.v.calendar.google.com": "v",    # geprueft
+    "group.calendar.google.com": "g",
+    "import.calendar.google.com": "i",
+}
+
+
 def google_calendar_id(ics_url):
     """Kalender-ID aus der geheimen iCal-Adresse ziehen.
 
@@ -302,15 +314,28 @@ def google_calendar_id(ics_url):
     return unquote(m.group(1)) if m else None
 
 
+def eid_calendar_id(calendar_id):
+    """Kalender-ID so kuerzen, wie Google sie in der eid erwartet.
+
+    "hendrik.wolf.004@gmail.com" -> "hendrik.wolf.004@m". Mit der vollen
+    Adresse findet Google den Termin nicht und zeigt nur die Tagesansicht.
+    """
+    name, sep, domain = (calendar_id or "").rpartition("@")
+    if not sep:
+        return calendar_id
+    return f"{name}@{EID_DOMAINS.get(domain.lower(), domain)}"
+
+
 def google_event_url(ev, calendar_id, day, recurring_uids):
     """Link zum einzelnen Termin im Google Kalender.
 
-    Google adressiert Termine ueber die "eid": base64 aus "<Termin-ID> <Kalender-ID>".
-    Die Termin-ID steckt in der UID der iCal-Datei (vor dem @). Nur bei Terminen
-    aus einer Serie haengt Google den Zeitstempel der Wiederholung mit "_" an --
-    bei Einzelterminen wuerde ein Zeitstempel den Link kaputt machen. Achtung:
-    recurring_ical_events setzt RECURRENCE-ID auf jedes Vorkommen, auch auf
-    Einzeltermine; welche UID wirklich eine Serie ist, steht in recurring_uids.
+    Google adressiert Termine ueber die "eid": base64 aus "<Termin-ID> <Kalender-ID>",
+    Padding abgeschnitten -- genau das Format, das die Calendar-API als htmlLink
+    liefert. Die Termin-ID steckt in der UID der iCal-Datei (vor dem @). Nur bei
+    Terminen aus einer Serie haengt Google den Zeitstempel der Wiederholung in UTC
+    mit "_" an; bei Einzelterminen wuerde ein Zeitstempel den Link kaputt machen.
+    Achtung: recurring_ical_events setzt RECURRENCE-ID auf jedes Vorkommen, auch
+    auf Einzeltermine; welche UID wirklich eine Serie ist, steht in recurring_uids.
     Ohne UID oder Kalender-ID gibt es keinen sicheren Link -> Tagesansicht.
     """
     day_url = f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
@@ -332,8 +357,8 @@ def google_event_url(ev, calendar_id, day, recurring_uids):
         event_id = f"{event_id}_{stamp}"
 
     eid = base64.urlsafe_b64encode(
-        f"{event_id} {calendar_id}".encode("utf-8")).decode().rstrip("=")
-    return f"https://calendar.google.com/calendar/u/0/r/eventedit/{eid}"
+        f"{event_id} {eid_calendar_id(calendar_id)}".encode("utf-8")).decode().rstrip("=")
+    return f"https://www.google.com/calendar/event?eid={eid}"
 
 
 def fetch_calendar(ics_url):
