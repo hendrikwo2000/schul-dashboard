@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-15T18:55:14+02:00",
+  "updated": "2026-07-15T19:11:53+02:00",
   "demo": false,
   "untis": {
     "ok": true,
@@ -14,7 +14,7 @@
             "subject": "Lernfeld",
             "subjectShort": "FST-LF",
             "room": "4.71",
-            "teacher": "",
+            "teacher": "RomMa",
             "code": "",
             "info": ""
           },
@@ -24,7 +24,7 @@
             "subject": "Lernfeld",
             "subjectShort": "FST-LF",
             "room": "4.05",
-            "teacher": "",
+            "teacher": "EngHa",
             "code": "",
             "info": ""
           },
@@ -34,7 +34,7 @@
             "subject": "Lernfeld",
             "subjectShort": "FST-LF",
             "room": "4.05",
-            "teacher": "",
+            "teacher": "EngHa",
             "code": "",
             "info": ""
           },
@@ -44,17 +44,36 @@
             "subject": "Lernfeld",
             "subjectShort": "FST-LF",
             "room": "4.05",
-            "teacher": "",
+            "teacher": "EngHa",
             "code": "",
             "info": ""
           }
         ]
       }
-    ]
+    ],
+    "debug": {
+      "te_sample": null,
+      "rest_teachers": 4
+    }
   },
   "iserv": {
     "ok": true,
     "error": null,
-    "tasks": []
+    "tasks": [],
+    "debug": {
+      "url": "https://bea-portal.de/iserv/auth/auth?_iserv_app_url=%2Fiserv%2Fexercise&state=eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IjEifQ.eyJyZWRpcmVjdF91cmkiOiJodHRwczovL2JlYS1wb3J0YWwuZGUvaXNlcnYvZXhlcmNpc2UiLCJub25jZSI6ImQ2MDg1YzEzLTBlYmYtNDQ1Yi1hZTU0LTk4OWRhYzhmZWM1ZiIsImFkbWluIjpmYWxzZSwiaXNzIjoiaHR0cHM6Ly9iZWEtcG9ydGFsLmRlL2lzZXJ2LyIsImV4cCI6MTc5MTkxMTUxNywibmJmIjoxNzg0MTM1NDU3LCJpYXQiOjE3ODQxMzU1MTcsInNpZCI6IiJ9.XyVVKImIkWBH-NI1kR5pH_nD96DBVdt-C009RPb5uOExYN8d_N1uLTSV3mAxF4EAEuPyzirMgkqeZYnKzhuRDg&nonce=d6085c13-0ebf-445b-ae54-989dac8fec5f&client_id=158b5dff-9aad-41f3-b91f-cdc1c84e595e&redirect_uri=https%3A%2F%2Fbea-portal.de%2Fiserv%2Fapp%2Fauthentication%2Fredirect&scope=openid%20uuid%20iserv%3Asession-id%20iserv%3Aweb-ui%20iserv%3A2fa%3Aconfiguration%20iserv%3Aaccess-groups&response_type=code",
+      "title": "IServ - bea-portal.de",
+      "links": 0,
+      "modules": [
+        [
+          "Impressum",
+          "/iserv/app/legal"
+        ],
+        [
+          "klicken Sie hier",
+          "https://bea-portal.de/iserv/app/authentication/redirect?state=eyJ0eXAiOiJKV1QiLC"
+        ]
+      ]
+    }
   }
 }
