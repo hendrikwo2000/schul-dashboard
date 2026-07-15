@@ -195,6 +195,25 @@ def parse_iserv_date(text):
     return f"{y}-{mo}-{d}T{h or '23'}:{mi or '59'}"
 
 
+def complete_iserv_sso(session, resp):
+    """IServ schickt eingeloggte Nutzer durch einen OpenID-Zwischenschritt.
+
+    Im Browser laeuft der automatisch (JavaScript); ohne JS bleibt man auf
+    einer Zwischenseite mit einem "klicken Sie hier"-Link. Diesem Link
+    folgen wir hier manuell, bis wir auf der Zielseite ankommen.
+    """
+    for _ in range(4):
+        if "/iserv/auth/auth" not in resp.url and "authentication/redirect" not in resp.text:
+            return resp
+        soup = BeautifulSoup(resp.text, "html.parser")
+        link = soup.find("a", href=re.compile(r"authentication/redirect"))
+        if link is None:
+            return resp
+        resp = session.get(requests.compat.urljoin(ISERV_BASE, link["href"]),
+                           timeout=30)
+    return resp
+
+
 def fetch_iserv(user, password):
     """Offene Aufgaben aus dem IServ-Aufgabenmodul."""
     session = requests.Session()
@@ -210,6 +229,7 @@ def fetch_iserv(user, password):
     # Bei fehlgeschlagenem Login zeigt IServ wieder die Login-Seite an
     if "/auth/login" in resp.url or 'name="_password"' in resp.text:
         raise RuntimeError("IServ-Login fehlgeschlagen (Benutzername/Passwort pruefen)")
+    resp = complete_iserv_sso(session, resp)
 
     link_re = re.compile(r"exercise/show/\d+")
     resp = session.get(
@@ -217,12 +237,13 @@ def fetch_iserv(user, password):
         params={"filter[status]": "current"},
         timeout=30,
     )
+    resp = complete_iserv_sso(session, resp)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     links = soup.find_all("a", href=link_re)
     if not links:
         # Fallback: Liste ohne Filter versuchen
-        resp = session.get(f"{ISERV_BASE}/iserv/exercise", timeout=30)
+        resp = complete_iserv_sso(session, session.get(f"{ISERV_BASE}/iserv/exercise", timeout=30))
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
         links = soup.find_all("a", href=link_re)
