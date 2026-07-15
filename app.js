@@ -52,9 +52,12 @@ function bindAppLinks() {
       if (!target) return;
       e.preventDefault();
       const webUrl = a.href;
-      const timer = setTimeout(() => { window.location.href = webUrl; }, 1500);
+      // Fallback zur Website nur, wenn sich nichts tut. Sobald die Seite den
+      // Fokus verliert (App-Dialog oder App-Wechsel), wird er abgebrochen.
+      const timer = setTimeout(() => { window.location.href = webUrl; }, 2500);
       const cancel = () => clearTimeout(timer);
       window.addEventListener("pagehide", cancel, { once: true });
+      window.addEventListener("blur", cancel, { once: true });
       document.addEventListener("visibilitychange", () => {
         if (document.hidden) cancel();
       }, { once: true });
