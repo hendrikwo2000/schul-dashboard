@@ -58,6 +58,22 @@ def fetch_untis(user, password):
     monday = today - dt.timedelta(days=today.weekday())
     saturday = monday + dt.timedelta(days=5)
 
+    # WebUntis lehnt Abfragen ueber die Schuljahresgrenze hinweg ab -> Woche
+    # auf das Schuljahr begrenzen, in dem sie liegt.
+    try:
+        years = untis_rpc(session, "getSchoolyears", {})
+        spans = [(dt.datetime.strptime(str(y["startDate"]), "%Y%m%d").date(),
+                  dt.datetime.strptime(str(y["endDate"]), "%Y%m%d").date())
+                 for y in years or []]
+        span = next((s for s in spans if s[0] <= today <= s[1]), None)
+        if span is None:
+            span = next((s for s in spans if s[0] <= saturday and s[1] >= monday), None)
+        if span:
+            monday = max(monday, span[0])
+            saturday = min(saturday, span[1])
+    except Exception:
+        pass  # im Zweifel unveraendert abfragen
+
     result = untis_rpc(session, "getTimetable", {"options": {
         "element": {"id": person_id, "type": person_type},
         "startDate": int(monday.strftime("%Y%m%d")),
