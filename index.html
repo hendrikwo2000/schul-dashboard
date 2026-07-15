@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schul-Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <h1>📚 Schul-Dashboard</h1>
+      <div class="header-links" id="header-links"></div>
+    </div>
+    <div class="header-sub">
+      <span id="today-label"></span>
+      <span id="updated-label" class="muted"></span>
+    </div>
+    <div id="demo-banner" class="banner hidden">
+      ⚠️ Demo-Daten — die GitHub-Action hat noch keine echten Daten geladen.
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="timetable-card">
+      <div class="card-head">
+        <h2>🕗 Stundenplan</h2>
+        <div class="toggle" role="tablist">
+          <button id="btn-today" class="active" role="tab">Heute</button>
+          <button id="btn-week" role="tab">Woche</button>
+        </div>
+      </div>
+      <div id="timetable"></div>
+    </section>
+
+    <section class="card" id="tasks-card">
+      <div class="card-head">
+        <h2>📝 Offene Aufgaben <span class="muted small">(IServ)</span></h2>
+      </div>
+      <div id="tasks"></div>
+    </section>
+  </main>
+
+  <footer class="muted small">
+    Aktualisiert sich werktags automatisch alle 30 Minuten ·
+    <a href="https://github.com" id="repo-link" target="_blank" rel="noopener">Quellcode</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "updated": "2026-07-15T08:00:00+02:00",
+  "demo": true,
+  "untis": {
+    "ok": true,
+    "error": null,
+    "days": [
+      {
+        "date": "2026-07-15",
+        "lessons": [
+          { "start": "08:00", "end": "09:30", "subject": "Elektrotechnik", "subjectShort": "ET", "room": "B204", "teacher": "Hr. Meyer", "code": "", "info": "" },
+          { "start": "09:50", "end": "11:20", "subject": "Mathematik", "subjectShort": "MA", "room": "B204", "teacher": "Fr. Schulz", "code": "irregular", "info": "Vertretung: Hr. Krause" },
+          { "start": "11:40", "end": "13:10", "subject": "Englisch", "subjectShort": "EN", "room": "A112", "teacher": "Fr. Lange", "code": "cancelled", "info": "Entfällt" },
+          { "start": "13:40", "end": "15:10", "subject": "Fachpraxis Energietechnik", "subjectShort": "FP", "room": "Werkstatt 2", "teacher": "Hr. Otto", "code": "", "info": "" }
+        ]
+      },
+      {
+        "date": "2026-07-16",
+        "lessons": [
+          { "start": "08:00", "end": "09:30", "subject": "Deutsch", "subjectShort": "DE", "room": "A110", "teacher": "Fr. Berg", "code": "", "info": "" },
+          { "start": "09:50", "end": "11:20", "subject": "Elektrotechnik", "subjectShort": "ET", "room": "B204", "teacher": "Hr. Meyer", "code": "", "info": "" }
+        ]
+      },
+      {
+        "date": "2026-07-17",
+        "lessons": [
+          { "start": "08:00", "end": "09:30", "subject": "Wirtschaft & Gesellschaft", "subjectShort": "WuG", "room": "A201", "teacher": "Hr. Feld", "code": "", "info": "" },
+          { "start": "09:50", "end": "13:10", "subject": "Fachpraxis Energietechnik", "subjectShort": "FP", "room": "Werkstatt 2", "teacher": "Hr. Otto", "code": "", "info": "" }
+        ]
+      }
+    ]
+  },
+  "iserv": {
+    "ok": true,
+    "error": null,
+    "tasks": [
+      { "title": "Schaltplan Wechselschaltung zeichnen", "url": "https://bea-portal.de/iserv/exercise", "start": "2026-07-10T00:00", "due": "2026-07-15T23:59", "done": false },
+      { "title": "Mathe: Übungsblatt Trigonometrie", "url": "https://bea-portal.de/iserv/exercise", "start": "2026-07-13T00:00", "due": "2026-07-17T14:00", "done": false },
+      { "title": "Englisch: Vocabulary Unit 4", "url": "https://bea-portal.de/iserv/exercise", "start": "2026-07-14T00:00", "due": "2026-07-24T23:59", "done": false },
+      { "title": "Bericht Praktikumswoche", "url": "https://bea-portal.de/iserv/exercise", "start": "2026-07-01T00:00", "due": "2026-07-14T23:59", "done": false }
+    ]
+  }
+}

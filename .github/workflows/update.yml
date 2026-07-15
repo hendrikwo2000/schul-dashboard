@@ -1,0 +1,47 @@
+name: Daten aktualisieren
+
+on:
+  schedule:
+    # Mo-Fr alle 30 Minuten zwischen 05:00 und 16:59 UTC (= 6/7 bis 18 Uhr deutscher Zeit)
+    - cron: "*/30 5-16 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: pip install requests beautifulsoup4 tzdata
+
+      - name: Daten abrufen
+        env:
+          UNTIS_USER: ${{ secrets.UNTIS_USER }}
+          UNTIS_PASS: ${{ secrets.UNTIS_PASS }}
+          ISERV_USER: ${{ secrets.ISERV_USER }}
+          ISERV_PASS: ${{ secrets.ISERV_PASS }}
+        run: python scripts/fetch_data.py
+
+      - name: Änderungen committen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/data.json
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen."
+          else
+            git commit -m "Daten aktualisiert"
+            git push
+          fi
