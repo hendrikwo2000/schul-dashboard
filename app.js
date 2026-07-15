@@ -10,7 +10,11 @@ const CONFIG = {
   jsonbinUrl: "https://api.jsonbin.io/v3/b/6a4bf236da38895dfe36c173/latest",
   jsonbinKey: "$2a$10$BGeFi/PYFCLdZs0Bzu8PHeijV91l8JX.izcEgvuptBkIeXwePMKSu",
   todoCategories: ["Schule", "Facharbeit"],
-  // Ab diesem Alter der Daten warnt das Dashboard (die Action läuft alle 30 Min.)
+  // Zeitfenster, in dem die GitHub-Action läuft (lokale Uhrzeit, siehe update.yml).
+  // Nachts läuft sie absichtlich nicht - dann sind alte Daten normal, kein Fehler.
+  runFrom: 6,
+  runTo: 22,
+  // Ab diesem Alter warnt das Dashboard, aber nur innerhalb des Zeitfensters
   staleHours: 3,
   // Ganztägige Termine ab dieser Länge kommen als Leiste statt an jedem Tag
   longRunnerDays: 3,
@@ -128,13 +132,19 @@ function greeting() {
 }
 
 // Nur melden, wenn die Action offenbar hängt - sonst bleibt der Kopf leer.
+// Nachts laeuft sie planmaessig nicht, da sind alte Daten kein Fehler.
 function renderStale() {
   const el = $("#stale-banner");
+  const hour = new Date().getHours();
+  // Erst eine Stunde nach dem ersten geplanten Lauf warnen: um 6 Uhr sind die
+  // Daten von gestern Abend noch voellig normal, der erste Lauf des Tages ist
+  // gerade erst dran (GitHub startet Cron-Jobs gern 5-20 Min. spaeter).
+  const imFenster = hour >= CONFIG.runFrom + 1 && hour < CONFIG.runTo;
   const hours = data?.updated
     ? Math.floor((Date.now() - new Date(data.updated).getTime()) / 3600000)
     : null;
 
-  if (hours === null || Number.isNaN(hours) || hours < CONFIG.staleHours) {
+  if (!imFenster || hours === null || Number.isNaN(hours) || hours < CONFIG.staleHours) {
     el.classList.add("hidden");
     return;
   }
@@ -584,12 +594,55 @@ function speechParts() {
 
 let voices = [];
 const CAN_SPEAK = "speechSynthesis" in window;
+const VOICE_KEY = "dashboardVoice";
+
+// Die lokalen Windows-Stimmen (Hedda, Katja, Stefan) sind alte SAPI-Stimmen und
+// klingen blechern. Deutlich natuerlicher sind die neuronalen Stimmen, die der
+// Browser mitbringt: Edge hat "... Online (Natural)", Chrome "Google Deutsch".
+// Beide laufen ueber das Netz - deshalb die lokale Stimme als Rueckfallebene.
+const VOICE_RANK = [
+  (v) => /natural|neural/i.test(v.name),
+  (v) => /online/i.test(v.name),
+  (v) => /google/i.test(v.name),
+  (v) => v.lang === "de-DE",
+];
 
 function germanVoice() {
-  return voices.find((v) => v.lang === "de-DE" && v.localService)
-    || voices.find((v) => v.lang === "de-DE")
-    || voices.find((v) => v.lang?.startsWith("de"))
-    || null;
+  const de = voices.filter((v) => v.lang?.toLowerCase().startsWith("de"));
+  if (!de.length) return null;
+
+  const gewuenscht = de.find((v) => v.name === localStorage.getItem(VOICE_KEY));
+  if (gewuenscht) return gewuenscht;
+
+  for (const besser of VOICE_RANK) {
+    const treffer = de.find(besser);
+    if (treffer) return treffer;
+  }
+  return de[0];
+}
+
+// Auswahlfeld nur zeigen, wenn es überhaupt etwas zu wählen gibt
+function renderVoicePicker() {
+  const sel = $("#voice-sel");
+  const de = voices.filter((v) => v.lang?.toLowerCase().startsWith("de"));
+  sel.classList.toggle("hidden", de.length < 2);
+  if (de.length < 2) return;
+
+  const aktiv = germanVoice()?.name;
+  if (sel.dataset.filled === String(de.length) && sel.value === aktiv) return;
+  sel.dataset.filled = String(de.length);
+  sel.innerHTML = de.map((v) => {
+    // "Microsoft Katja Online (Natural) - German (Germany)" -> "Katja (natürlich)"
+    // "Google Deutsch" -> "Google Deutsch (natürlich)"
+    const kurz = v.name
+      .replace(/\s*-\s*(German|Deutsch).*$/i, "")
+      .replace(/\s*\(Natural\)/i, "")
+      .replace(/\s+Online$/i, "")
+      .replace(/^Microsoft\s+/i, "")
+      .trim() || v.name;
+    const natuerlich = /natural|neural|online|google/i.test(v.name) ? " (natürlich)" : "";
+    return `<option value="${esc(v.name)}"${v.name === aktiv ? " selected" : ""}>${esc(kurz)}${natuerlich}</option>`;
+  }).join("");
 }
 
 function setSpeakBtn(active) {
@@ -618,14 +671,23 @@ function speak() {
 
 if (CAN_SPEAK) {
   voices = speechSynthesis.getVoices();
+  renderVoicePicker();
+  // Die Netz-Stimmen trudeln erst nach dem Laden ein
   speechSynthesis.addEventListener("voiceschanged", () => {
     voices = speechSynthesis.getVoices();
+    renderVoicePicker();
   });
   $("#speak-btn").addEventListener("click", speak);
+  $("#voice-sel").addEventListener("change", (e) => {
+    localStorage.setItem(VOICE_KEY, e.target.value);
+    speechSynthesis.cancel();
+    setSpeakBtn(false);
+  });
   // Ohne das redet der Browser nach dem Verlassen der Seite weiter
   window.addEventListener("pagehide", () => speechSynthesis.cancel());
 } else {
   $("#speak-btn").classList.add("hidden");
+  $("#voice-sel").classList.add("hidden");
 }
 
 // ---------------------------------------------------------------- Start
