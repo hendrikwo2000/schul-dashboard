@@ -6,8 +6,10 @@ const CONFIG = {
   todoAppUrl: "https://hendrikwo2000.github.io/todo-app/",
   iservUrl: "https://bea-portal.de/iserv/exercise",
   iservApp: "iserv://",
+  iservPackage: "eu.iserv.webapp",
   untisUrl: "https://hh5910.webuntis.com/WebUntis/?school=hh5910",
   untisApp: "untis://",
+  untisPackage: "com.grupet.web.app",
   repoUrl: "https://github.com/hendrikwo2000/schul-dashboard",
   // ToDo-Board (JSONBin-Cloud der ToDo-App; Key ist bewusst nur für dieses Bin gültig)
   jsonbinUrl: "https://api.jsonbin.io/v3/b/6a4bf236da38895dfe36c173/latest",
@@ -24,16 +26,30 @@ let calView = "today";
 
 // ---------------------------------------------------------------- Hilfen
 const $ = (sel) => document.querySelector(sel);
-const IS_MOBILE = /Android|iPhone|iPad/i.test(navigator.userAgent);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const IS_IOS = /iPhone|iPad/i.test(navigator.userAgent);
 
 // Auf dem Handy zuerst die App versuchen; oeffnet sie sich nicht,
-// nach 1,5 s automatisch auf die Website ausweichen. Am PC: Website.
+// automatisch auf die Website ausweichen. Am PC: direkt Website.
+// Android: intent:-Link mit Paketname (eigener Fallback eingebaut),
+// iOS: URL-Schema mit Timer-Fallback.
+function appUrl(a) {
+  if (IS_ANDROID && a.dataset.package) {
+    return "intent:#Intent;package=" + a.dataset.package +
+      ";action=android.intent.action.MAIN" +
+      ";S.browser_fallback_url=" + encodeURIComponent(a.href) + ";end";
+  }
+  return a.dataset.app || "";
+}
+
 function bindAppLinks() {
-  document.querySelectorAll("a[data-app]").forEach((a) => {
+  document.querySelectorAll("a[data-app], a[data-package]").forEach((a) => {
     if (a.dataset.bound) return;
     a.dataset.bound = "1";
     a.addEventListener("click", (e) => {
-      if (!IS_MOBILE) return;
+      if (!IS_ANDROID && !IS_IOS) return;
+      const target = appUrl(a);
+      if (!target) return;
       e.preventDefault();
       const webUrl = a.href;
       const timer = setTimeout(() => { window.location.href = webUrl; }, 1500);
@@ -42,7 +58,7 @@ function bindAppLinks() {
       document.addEventListener("visibilitychange", () => {
         if (document.hidden) cancel();
       }, { once: true });
-      window.location.href = a.dataset.app;
+      window.location.href = target;
     });
   });
 }
@@ -89,8 +105,8 @@ function renderHeader() {
 
   const links = [];
   if (CONFIG.todoAppUrl) links.push(`<a href="${esc(CONFIG.todoAppUrl)}" target="_blank" rel="noopener">✅ ToDo-Board</a>`);
-  links.push(`<a href="${esc(CONFIG.iservUrl)}" data-app="${esc(CONFIG.iservApp)}" target="_blank" rel="noopener">🏫 IServ</a>`);
-  links.push(`<a href="${esc(CONFIG.untisUrl)}" data-app="${esc(CONFIG.untisApp)}" target="_blank" rel="noopener">📅 WebUntis</a>`);
+  links.push(`<a href="${esc(CONFIG.iservUrl)}" data-app="${esc(CONFIG.iservApp)}" data-package="${esc(CONFIG.iservPackage)}" target="_blank" rel="noopener">🏫 IServ</a>`);
+  links.push(`<a href="${esc(CONFIG.untisUrl)}" data-app="${esc(CONFIG.untisApp)}" data-package="${esc(CONFIG.untisPackage)}" target="_blank" rel="noopener">📅 WebUntis</a>`);
   $("#header-links").innerHTML = links.join("");
   bindAppLinks();
 
