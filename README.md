@@ -7,7 +7,7 @@ gehostet über GitHub Pages. Ein Klick auf 🔊 liest den Tag vor.
 ## Wie es funktioniert
 
 ```
-GitHub Action (täglich alle 30 Min., 6–22 Uhr)
+GitHub Action (täglich alle 15 Min., 6–22 Uhr)
   └─ scripts/fetch_data.py
        ├─ WebUntis-API  → Stundenplan der Woche
        ├─ IServ-Login   → offene Aufgaben
@@ -47,9 +47,10 @@ Die Zugangsdaten liegen **nur** in GitHub Secrets — nie im Code oder Repo.
 3. **GitHub Pages aktivieren:** *Settings → Pages → Source: Deploy from a
    branch → Branch: `main`, Ordner `/ (root)`*.
 4. **Action einmal von Hand starten:** *Actions → „Daten aktualisieren" →
-   Run workflow*. Danach läuft sie täglich 6–22 Uhr alle 30 Minuten von selbst.
+   Run workflow*. Danach läuft sie täglich 6–22 Uhr alle 15 Minuten von selbst.
    GitHub startet Cron-Jobs bei Last auch mal 5–20 Minuten später oder lässt
-   einen Lauf aus — sind die Daten älter als 3 Stunden, warnt das Dashboard.
+   einen Lauf aus — sind die Daten tagsüber älter als 3 Stunden, warnt das
+   Dashboard. Nachts läuft die Action nicht, dort wird nicht gewarnt.
 
 Fertig — das Dashboard ist unter `https://<benutzername>.github.io/<repo>/` erreichbar.
 

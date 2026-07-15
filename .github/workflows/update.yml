@@ -2,9 +2,11 @@ name: Daten aktualisieren
 
 on:
   schedule:
-    # Täglich alle 30 Minuten zwischen 04:00 und 19:59 UTC
-    # (= 6 bis 22 Uhr deutscher Sommerzeit, 5 bis 21 Uhr im Winter)
-    - cron: "*/30 4-19 * * *"
+    # Täglich alle 15 Minuten zwischen 04:00 und 19:59 UTC
+    # (= 6 bis 22 Uhr deutscher Sommerzeit, 5 bis 21 Uhr im Winter).
+    # Nachts läuft nichts - das Dashboard warnt deshalb nur tagsüber über
+    # alte Daten (CONFIG.runFrom/runTo in app.js müssen dazu passen).
+    - cron: "*/15 4-19 * * *"
   workflow_dispatch:
 
 permissions:
