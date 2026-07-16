@@ -105,22 +105,37 @@ header h1 { margin: 0; font-size: 1.5rem; }
 
 main {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-top: 16px;
 }
 
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* Einspaltig sollen die Karten anders laufen als die Spalten es vorgeben
+   (Termine vor Aufgaben) - dafür lösen sich die Spalten auf und die Karten
+   werden selbst zu Rasterfeldern, die sich sortieren lassen.
+   Muss nach der .col-Regel stehen: gleiche Spezifität, es zählt die Reihenfolge. */
 @media (max-width: 760px) {
   main { grid-template-columns: 1fr; }
+  .col { display: contents; }
+  #timetable-card { order: 1; }
+  #calendar-card { order: 2; }
+  #tasks-card { order: 3; }
+  #todos-card { order: 4; }
 }
-
-.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 .card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 16px;
+}
+
+/* Karte mit rotem Punkt (überfällig, heute oder morgen fällig) */
+.card.urgent {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-soft);
 }
 
 .card-head {

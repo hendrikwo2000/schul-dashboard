@@ -466,6 +466,8 @@ async function loadTodos() {
   } catch (err) {
     todos = [];
     el.innerHTML = `<div class="error">ToDo-Board nicht erreichbar: ${esc(err.message)}</div>`;
+  } finally {
+    markUrgent(); // ToDos trudeln nach renderAll ein
   }
 }
 
@@ -700,11 +702,20 @@ if (CAN_SPEAK) {
 }
 
 // ---------------------------------------------------------------- Start
+// Der rote Punkt steckt schon in den Einträgen (überfällig/heute/morgen) -
+// die Karte drumherum erbt ihn, damit das Auge zuerst dort landet.
+function markUrgent() {
+  document.querySelectorAll("main .card").forEach((card) => {
+    card.classList.toggle("urgent", !!card.querySelector(".dot.red"));
+  });
+}
+
 function renderAll() {
   renderHeader();
   renderTimetable();
   renderCalendar();
   renderTasks();
+  markUrgent();
 }
 
 function setView(v) {
