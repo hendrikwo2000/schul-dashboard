@@ -153,17 +153,29 @@ geplanter Wochentag, erfülltes Wochenziel oder eine ruhende Obergrenze. Die
 Gewohnheit fällt dann aus der Kachel, statt als „erledigt" durchzugehen: sie
 ist ja nichts, was heute jemand geschafft hätte.
 
-## Einrichtung (einmalig)
+## Einrichtung
 
-1. Cloudflare-Pages-Projekt anlegen, Repo `hendrikwo2000/schul-dashboard`
-   verbinden. Framework **„Keine"**, Build-Befehl **leer**,
-   Ausgabeverzeichnis **`web`**.
-2. D1-Datenbank **`todo`** als **`DB`** binden.
-3. Eigene Domain **`schule.it-wolf.org`** zuordnen.
+Am 12.08.2026 erledigt, bis auf den DNS-Eintrag (siehe unten). Steht hier für
+den Fall, dass das Projekt je neu aufgesetzt werden muss.
+
+1. Pages-Projekt `schul-dashboard`, Repo `hendrikwo2000/schul-dashboard`,
+   Produktionszweig `main`, kein Build-Befehl.
+2. **Stammverzeichnis (`root_dir`) = `web`** — nicht das Ausgabeverzeichnis!
+   Der Unterschied ist keine Wortklauberei: Pages sucht den `functions`-Ordner
+   relativ zum Stammverzeichnis. Stünde `web` stattdessen als
+   *Ausgabeverzeichnis* und das Stammverzeichnis bliebe leer, würden die
+   statischen Dateien zwar ausgeliefert, aber `/api/*` liefe ins Leere.
+   Bei `todo-app` und `fokus-app` steht `root_dir` auf leer, weil dort `web/`
+   selbst das Repo-Root ist — hier liegt es eine Ebene tiefer.
+3. D1-Datenbank **`todo`** als **`DB`** binden (Produktion und Vorschau).
 4. `DASHBOARD_TOKEN` als **Secret** auf dem Pages-Projekt setzen und
    **denselben Wert** als GitHub-Actions-Secret im Repo.
-5. `web/migration-dashboard.sql` in der D1-Konsole ausführen.
-6. GitHub Pages für das Repo abschalten (die alte Adresse zeigt sonst weiter
+5. `web/migration-dashboard.sql` gegen die Live-D1 laufen lassen.
+6. Eigene Domain **`schule.it-wolf.org`** zuordnen — **und den CNAME
+   anlegen.** Über das Dashboard macht Cloudflare das selbst; über die API
+   **nicht**, dort bleibt die Domain auf `pending` stehen, bis der Eintrag
+   von Hand kommt: `CNAME schule → schul-dashboard.pages.dev`, **Proxied**.
+7. GitHub Pages für das Repo abschalten (die alte Adresse zeigt sonst weiter
    auf eine Seite, die es nicht mehr gibt).
 
 Optional als Umgebungsvariablen: `TODO_BEREICHE` (Pages) und `DASHBOARD_URL`
@@ -171,6 +183,17 @@ Optional als Umgebungsvariablen: `TODO_BEREICHE` (Pages) und `DASHBOARD_URL`
 
 **Falle:** Neue Umgebungsvariablen auf einem Pages-Projekt greifen erst nach
 einem **frischen Deploy** — ein leerer Commit reicht.
+
+**Was per API/Wrangler geht und was nicht** (12.08.2026 durchgespielt):
+
+- Ein Pages-Projekt **mit** Git-Anbindung lässt sich sehr wohl über die API
+  anlegen (`POST /pages/projects` mit `source.type = "github"`), obwohl die
+  Doku nahelegt, das ginge nur im Dashboard, und `wrangler pages project
+  create` keine Git-Option hat. Es funktioniert, weil die GitHub-Installation
+  durch die anderen Projekte schon mit dem Account verknüpft ist — Cloudflare
+  löst `owner_id` und `repo_id` selbst auf.
+- **DNS geht nicht.** Der OAuth-Zugang von Wrangler hat `zone (read)`, was
+  für DNS-Einträge nicht reicht — weder lesend noch schreibend.
 
 ## Lokal testen
 
