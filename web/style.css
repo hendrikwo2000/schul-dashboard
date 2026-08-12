@@ -414,6 +414,11 @@ a.dauer:hover { filter: brightness(.97); }
 
 .ein-hinweis { font-size: 12px; color: var(--muted); margin: 0; }
 
+/* Der einzige Knopf mit einem ganzen Satz drauf. `.btn` schreibt sonst
+   `white-space: nowrap` vor - bei 360 px blieben davon 4 px Luft, ab 320 px
+   liefe er aus dem Dialog heraus. Hier darf er umbrechen. */
+#googleKnopf { white-space: normal; text-align: center; }
+
 /* Ein Bereich zum An- und Abwaehlen. Die ganze Zeile ist die Trefferflaeche,
    nicht nur das Kaestchen - am Handy trifft man 16 px sonst nur mit Glueck. */
 .bereich-zeile {

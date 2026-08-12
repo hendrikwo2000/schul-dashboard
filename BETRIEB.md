@@ -171,6 +171,18 @@ Gezeigt wird **nur der Hauptkalender**, erkannt am `primary`-Schalter und
 nicht am Namen — genau wie im ToDo-Kalender. Abonnierte Kalender (Feiertage,
 Geburtstage, Kalenderwochen) würden die Kachel zupflastern.
 
+In den Einstellungen steht der Abschnitt „Google Kalender" mit vier Zuständen:
+verbunden (Untertitel ist die Adresse), nicht verbunden, Problem (abgelaufene
+Verknüpfung) und **gar nicht sichtbar**, wenn auf dem Pages-Projekt keine
+Zugangsdaten liegen — eine Einstellung anzubieten, die es nicht gibt, ist
+schlimmer als keine. Alle vier Wege führen zur ToDo-Liste, weil dort verknüpft
+wird.
+
+**Die Verknüpfung hängt am Konto, nicht an der Person.** Am 12.08.2026 stand
+sie nur bei `hendrik.wolf.004@gmail.com`; wer sich mit dem zweiten
+freigeschalteten Konto anmeldet, sieht „nicht verbunden" — und das ist kein
+Fehler, sondern die Wahrheit.
+
 Die Umformung in das Anzeigeformat steht in `web/functions/_lib/termine.js`
 und hat zwei Fallen, die den Code länger machen, als er aussieht:
 

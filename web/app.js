@@ -493,7 +493,10 @@ function zeichneAlles() {
   // Steht das Popup offen (etwa beim 10-Minuten-Nachladen), die Zahlen dort
   // mitziehen - sonst zeigt es "2 offen", waehrend die Kachel daneben schon
   // drei hat.
-  if (!$("#einstellungenPopup").hidden) zeichneBereiche();
+  if (!$("#einstellungenPopup").hidden) {
+    zeichneBereiche();
+    zeichneGoogle();
+  }
 }
 
 // ---------------------------------------------------------------- Umschalter
@@ -528,9 +531,48 @@ document.querySelectorAll("#einstellungenPopup details.ein-abschnitt").forEach((
   });
 });
 
+/**
+ * Der Google-Abschnitt zeigt nur den Stand - verbunden und getrennt wird in
+ * der ToDo-Liste. Dort haengt die Verknuepfung am Konto, und ein zweiter
+ * Zustimmungsdialog hier waere derselbe Vorgang an einem zweiten Ort.
+ *
+ * Fehlen die Zugangsdaten auf dem Pages-Projekt, verschwindet der Abschnitt
+ * ganz: eine Einstellung anzubieten, die es nicht gibt, ist schlimmer als
+ * keine.
+ */
+function zeichneGoogle() {
+  const g = stand?.google;
+  const abschnitt = $("#googleAbschnitt");
+
+  if (!g || !g.moeglich) {
+    abschnitt.hidden = true;
+    return;
+  }
+  abschnitt.hidden = false;
+
+  if (g.fehler) {
+    $("#subGoogle").textContent = "Problem";
+    $("#googleText").textContent = g.fehler;
+    $("#googleKnopf").textContent = "In der ToDo-Liste neu verbinden ↗";
+    return;
+  }
+  if (g.verbunden) {
+    $("#subGoogle").textContent = g.email || "verbunden";
+    $("#googleText").textContent =
+      "Die Termine kommen aus dem Hauptkalender dieses Kontos. Abonnierte Kalender wie Feiertage und Geburtstage bleiben draußen.";
+    $("#googleKnopf").textContent = "In der ToDo-Liste verwalten ↗";
+    return;
+  }
+  $("#subGoogle").textContent = "nicht verbunden";
+  $("#googleText").textContent =
+    "Noch kein Kalender verknüpft. Das läuft über die ToDo-Liste — die Verknüpfung hängt am Konto, das Dashboard liest sie nur mit.";
+  $("#googleKnopf").textContent = "In der ToDo-Liste verbinden ↗";
+}
+
 function oeffneEinstellungen() {
   resetAkkordeon();
   zeichneBereiche();
+  zeichneGoogle();
   $("#einstellungenPopup").hidden = false;
 }
 

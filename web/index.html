@@ -142,6 +142,26 @@
           </div>
         </details>
 
+        <!-- Zeigt nur den Stand und fuehrt zum Verbinden in die ToDo-Liste:
+             dort haengt die Verknuepfung, das Dashboard liest sie mit. Der
+             Abschnitt blendet sich komplett aus, wenn auf diesem Pages-Projekt
+             keine Google-Zugangsdaten hinterlegt sind - dann gibt es die
+             Funktion schlicht nicht. Gleiche Logik wie in der ToDo-Liste. -->
+        <details class="ein-abschnitt" id="googleAbschnitt" hidden data-abschnitt="google">
+          <summary class="ein-kopf">
+            <span class="ein-kopf-icon">📆</span>
+            <span class="ein-kopf-text">Google Kalender</span>
+            <span class="ein-kopf-sub" id="subGoogle"></span>
+            <span class="ein-kopf-pfeil">▾</span>
+          </summary>
+          <div class="ein-inhalt">
+            <p class="ein-hinweis" id="googleText"></p>
+            <a class="btn" id="googleKnopf" href="https://todo.it-wolf.org/" target="_blank" rel="noopener">
+              In der ToDo-Liste verbinden ↗
+            </a>
+          </div>
+        </details>
+
         <a class="ein-abschnitt ein-zeile ein-link" href="https://todo.it-wolf.org/" target="_blank" rel="noopener">
           <span class="ein-kopf-icon">📝</span>
           <span class="ein-kopf-text">ToDo-Liste</span>
