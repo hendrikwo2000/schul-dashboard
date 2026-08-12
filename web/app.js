@@ -127,12 +127,15 @@ function verdrahteAppLinks() {
 }
 
 // ---------------------------------------------------------------- Darstellung
+// Bleibt im Browser-Speicher, nicht am Konto: das Farbschema haengt am Geraet
+// (heller Bildschirm im Unterricht, dunkler abends), nicht an der Person.
 function setzeThema(thema) {
   document.documentElement.dataset.theme = thema;
-  $("#dunkelSchalter").checked = thema === "dark";
+  $("#themeSwitch").checked = thema === "dark";
+  $("#themeSwitchLabel").textContent = thema === "dark" ? "Dunkel" : "Hell";
 }
 
-$("#dunkelSchalter").addEventListener("change", (e) => {
+$("#themeSwitch").addEventListener("change", (e) => {
   const thema = e.target.checked ? "dark" : "light";
   localStorage.setItem("theme", thema);
   setzeThema(thema);
@@ -313,17 +316,29 @@ function terminHtml(t) {
 
 function zeichneTermine() {
   const el = $("#termine");
-  const kalender = stand?.daten?.calendar;
+  const google = stand?.google;
 
-  if (!kalender || (kalender.error && !kalender.events?.length)) {
-    el.innerHTML = `<div class="fehler-hinweis">Termine konnten nicht geladen werden: ${esc(kalender?.error || "keine Daten")}</div>`;
+  // Nicht eingerichtet oder nicht verknuepft ist kein Fehler, sondern ein
+  // Zustand - verbunden wird in der ToDo-Liste, deshalb der Link dorthin.
+  if (google && !google.moeglich) {
+    el.innerHTML = '<div class="leer-hinweis">Google-Kalender ist auf diesem Server nicht eingerichtet.</div>';
+    return;
+  }
+  if (google && !google.verbunden) {
+    el.innerHTML = `<div class="leer-hinweis">Kein Google-Kalender verknüpft.<br>
+      <a class="btn" href="${esc(CONFIG.anmeldeUrl)}" target="_blank" rel="noopener" style="margin-top:10px">In der ToDo-Liste verbinden ↗</a></div>`;
+    return;
+  }
+  if (google?.fehler) {
+    el.innerHTML = `<div class="fehler-hinweis">${esc(google.fehler)}</div>`;
     return;
   }
 
   const heute = heuteIso();
+  const alle = stand?.termine || [];
   const sichtbar = termineAnsicht === "heute"
-    ? (kalender.events || []).filter((t) => t.date === heute)
-    : (kalender.events || []);
+    ? alle.filter((t) => t.date === heute)
+    : alle;
 
   // Dauerlaeufer aussortieren und je Termin nur einmal zeigen.
   const laeufer = [];
@@ -360,10 +375,13 @@ function zeichneTermine() {
 }
 
 // ---------------------------------------------------------------- ToDos
-function todoHtml(t) {
+function todoHtml(t, mitListe) {
   const faellig = t.due ? new Date(t.due + "T00:00") : null;
   const ampel = fristAmpel(faellig);
-  const unter = [t.bereich, faellig ? faellig.toLocaleDateString("de-DE") : null, t.note]
+  // Der Listenname steht nur davor, wenn es ueberhaupt mehrere Listen gibt -
+  // bei einer einzigen waere er in jeder Zeile dasselbe Wort.
+  const unter = [mitListe ? t.liste : null, t.bereich,
+                 faellig ? faellig.toLocaleDateString("de-DE") : null, t.note]
     .filter(Boolean).join(" · ");
 
   return `
@@ -380,23 +398,34 @@ function todoHtml(t) {
 function zeichneTodos() {
   const el = $("#todos");
   const bereiche = stand?.bereiche || [];
-  $("#todoBereiche").textContent = bereiche.join(" & ");
+  const versteckt = new Set(stand?.einstellungen?.versteckteBereiche || []);
+
+  // Im Kachelkopf steht nur etwas, wenn wirklich gefiltert wird - sonst waere
+  // es eine Zahl ohne Aussage. Wird gefiltert, MUSS es dastehen: eine kurze
+  // Liste soll nicht wie "mehr ist nicht offen" aussehen.
+  const ausgeblendet = bereiche.filter((b) => versteckt.has(b.id)).length;
+  $("#todoBereiche").textContent = ausgeblendet
+    ? `${bereiche.length - ausgeblendet} von ${bereiche.length} Bereichen`
+    : "";
 
   if (stand?.todoFehler) {
     el.innerHTML = `<div class="fehler-hinweis">ToDos nicht lesbar: ${esc(stand.todoFehler)}</div>`;
     return;
   }
 
-  const todos = stand?.todos || [];
+  // Noch einmal filtern, obwohl der Server das schon tut: nach einem Klick in
+  // den Einstellungen soll die Kachel sofort stimmen und nicht erst, wenn die
+  // naechste Antwort da ist.
+  const todos = (stand?.todos || []).filter((t) => !versteckt.has(t.bereichId));
   if (!todos.length) {
-    // Die Bereichsnamen mit ausgeben: eine leere Kachel kann auch heissen,
-    // dass ein Bereich umbenannt wurde. Ohne den Hinweis sucht man den Fehler
-    // in der Datenbank statt im Namen.
-    el.innerHTML = `<div class="leer-hinweis">Keine offenen ToDos in ${esc(bereiche.join(" und ") || "den gewählten Bereichen")} 🎉</div>`;
+    el.innerHTML = ausgeblendet
+      ? '<div class="leer-hinweis">Keine offenen ToDos in den sichtbaren Bereichen 🎉</div>'
+      : '<div class="leer-hinweis">Keine offenen ToDos 🎉</div>';
     return;
   }
 
-  el.innerHTML = todos.map(todoHtml).join("") +
+  const mehrereListen = new Set(bereiche.map((b) => b.liste)).size > 1;
+  el.innerHTML = todos.map((t) => todoHtml(t, mehrereListen)).join("") +
     (stand?.todosGekuerzt ? '<div class="leer-hinweis">… weitere in der ToDo-Liste</div>' : "");
 }
 
@@ -461,6 +490,10 @@ function zeichneAlles() {
   zeichneFokus();
   markiereDringend();
   verdrahteAppLinks();
+  // Steht das Popup offen (etwa beim 10-Minuten-Nachladen), die Zahlen dort
+  // mitziehen - sonst zeigt es "2 offen", waehrend die Kachel daneben schon
+  // drei hat.
+  if (!$("#einstellungenPopup").hidden) zeichneBereiche();
 }
 
 // ---------------------------------------------------------------- Umschalter
@@ -477,15 +510,134 @@ verdrahteUmschalter("[data-plan]", (wert) => { planAnsicht = wert; zeichneStunde
 verdrahteUmschalter("[data-termine]", (wert) => { termineAnsicht = wert; zeichneTermine(); markiereDringend(); });
 
 // ---------------------------------------------------------------- Einstellungen
-$("#einstellungenBtn").addEventListener("click", () => { $("#einstellungen").hidden = false; });
-$("#einstellungenZu").addEventListener("click", () => { $("#einstellungen").hidden = true; });
+/**
+ * Immer nur EIN Abschnitt offen - dasselbe Verhalten wie in ToDo und Fokus.
+ * Ohne das steht nach ein paar Klicks alles offen und man scrollt durch
+ * Abschnitte, die man gar nicht sehen wollte.
+ */
+function resetAkkordeon() {
+  document.querySelectorAll("#einstellungenPopup details.ein-abschnitt").forEach((d) => { d.open = false; });
+}
+
+document.querySelectorAll("#einstellungenPopup details.ein-abschnitt").forEach((d) => {
+  d.addEventListener("toggle", () => {
+    if (!d.open) return;
+    document.querySelectorAll("#einstellungenPopup details.ein-abschnitt").forEach((a) => {
+      if (a !== d) a.open = false;
+    });
+  });
+});
+
+function oeffneEinstellungen() {
+  resetAkkordeon();
+  zeichneBereiche();
+  $("#einstellungenPopup").hidden = false;
+}
+
+function schliesseEinstellungen() {
+  $("#einstellungenPopup").hidden = true;
+}
+
+$("#einstellungenBtn").addEventListener("click", oeffneEinstellungen);
+$("#einstellungenZu").addEventListener("click", schliesseEinstellungen);
 // Klick auf den dunklen Rand schliesst - aber nur dort, nicht im Kasten selbst.
-$("#einstellungen").addEventListener("click", (e) => {
-  if (e.target === $("#einstellungen")) $("#einstellungen").hidden = true;
+// Am Handy fuellt der Dialog den Bildschirm, dort gibt es diesen Rand nicht;
+// deshalb ist das ✕ oben der Weg, der immer da ist.
+$("#einstellungenPopup").addEventListener("click", (e) => {
+  if (e.target === $("#einstellungenPopup")) schliesseEinstellungen();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") $("#einstellungen").hidden = true;
+  if (e.key === "Escape") schliesseEinstellungen();
 });
+
+// ---------------------------------------------------------------- Bereiche
+/**
+ * Die Bereichsliste zum An- und Abwaehlen.
+ *
+ * Gespeichert wird, was VERSTECKT ist (siehe _lib/einstellungen.js) - ein
+ * neuer Bereich taucht damit von selbst auf, statt unsichtbar zu bleiben, bis
+ * jemand nachsieht.
+ */
+function zeichneBereiche() {
+  const el = $("#bereichListe");
+  const bereiche = stand?.bereiche || [];
+  const versteckt = new Set(stand?.einstellungen?.versteckteBereiche || []);
+  const mehrereListen = new Set(bereiche.map((b) => b.liste)).size > 1;
+
+  $("#subBereiche").textContent = bereiche.length
+    ? `${bereiche.length - [...versteckt].filter((id) => bereiche.some((b) => b.id === id)).length} von ${bereiche.length}`
+    : "";
+
+  if (!bereiche.length) {
+    el.innerHTML = '<p class="ein-hinweis">Noch keine Bereiche in der ToDo-Liste.</p>';
+    return;
+  }
+
+  el.innerHTML = bereiche.map((b) => `
+    <label class="bereich-zeile">
+      <input type="checkbox" data-bereich="${esc(b.id)}"${versteckt.has(b.id) ? "" : " checked"}>
+      <span class="name">${esc(b.name)}${mehrereListen ? ` <span class="woher">${esc(b.liste)}</span>` : ""}</span>
+      <span class="zahl">${b.offene} offen</span>
+    </label>`).join("");
+
+  el.querySelectorAll("input[data-bereich]").forEach((box) => {
+    box.addEventListener("change", speichereBereiche);
+  });
+}
+
+// Klicks werden gesammelt, statt jeden einzeln zu schicken.
+//
+// FALLE, beim Testen gefunden: Ein einfaches "laeuft gerade schon" haette den
+// zweiten von zwei schnellen Klicks stillschweigend verschluckt - er wurde
+// uebersprungen, und das Neuladen danach setzte das Kaestchen wieder auf den
+// alten Stand. Wer zwei Bereiche hintereinander abwaehlt, ist aber der
+// Normalfall, nicht die Ausnahme. Jetzt zaehlt der ZULETZT geklickte Zustand:
+// die Uhr wird bei jedem Klick neu gestellt und liest beim Ablauf frisch aus
+// dem DOM.
+let speicherUhr = null;
+
+function aktuellVersteckte() {
+  return [...document.querySelectorAll("#bereichListe input[data-bereich]")]
+    .filter((box) => !box.checked)
+    .map((box) => box.dataset.bereich);
+}
+
+function speichereBereiche() {
+  const versteckteBereiche = aktuellVersteckte();
+
+  // Sofort im Speicher nachziehen, damit Kachel und Kopfzeile ohne Umweg
+  // ueber den Server stimmen.
+  if (stand) stand.einstellungen = { ...stand.einstellungen, versteckteBereiche };
+  const gesamt = (stand?.bereiche || []).length;
+  $("#subBereiche").textContent = `${gesamt - versteckteBereiche.length} von ${gesamt}`;
+  zeichneTodos();
+  markiereDringend();
+
+  clearTimeout(speicherUhr);
+  speicherUhr = setTimeout(schickeEinstellungen, 400);
+}
+
+async function schickeEinstellungen() {
+  const versteckteBereiche = aktuellVersteckte();
+  try {
+    const antwort = await fetch("/api/einstellungen", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ versteckteBereiche }),
+    });
+    if (!antwort.ok) throw new Error("HTTP " + antwort.status);
+  } catch (e) {
+    const el = $("#ladeFehler");
+    el.textContent = "⚠️ Einstellung konnte nicht gespeichert werden — sie gilt nur auf diesem Gerät, bis es wieder klappt.";
+    el.classList.add("warnung");
+    el.hidden = false;
+    return;
+  }
+  // Erst jetzt frisch holen: der Filter wirkt im Server, und nur von dort
+  // stimmt auch die Zahl der gekuerzten Eintraege.
+  laden();
+}
 
 $("#abmeldenBtn").addEventListener("click", async () => {
   if (!confirm("Abmelden? Das gilt auch für die ToDo-Liste und den Fokus-Tracker — es ist eine gemeinsame Anmeldung.")) return;

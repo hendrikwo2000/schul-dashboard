@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Holt Stundenplan (WebUntis), Aufgaben (IServ) und Termine (iCal) und
-schickt sie an das Dashboard.
+"""Holt Stundenplan (WebUntis) und Aufgaben (IServ) und schickt sie an das
+Dashboard.
+
+Termine kommen NICHT mehr von hier. Sie holt das Dashboard seit dem
+12.08.2026 direkt aus dem Google-Kalender des verknuepften Kontos - live statt
+viertelstuendlich, und ohne dass eine geheime iCal-Adresse als Secret
+herumliegen muss. Der iCal-Weg samt `fetch_calendar` ist deshalb ausgebaut.
 
 Bis zum 12.08.2026 schrieb dieses Skript eine verschluesselte data/data.json
 ins Repo, und die Seite entschluesselte sie im Browser. Seit dem Umzug auf
@@ -12,7 +17,6 @@ und was nur der Server herausgibt, muss der Browser nicht verstecken.
 Zugangsdaten kommen aus Umgebungsvariablen (lokal oder GitHub Secrets):
   UNTIS_USER, UNTIS_PASS   - WebUntis-Login (wie im Browser)
   ISERV_USER, ISERV_PASS   - IServ-Login (bea-portal.de)
-  ICAL_URL                 - geheime iCal-Adresse des Google-Kalenders
   DASHBOARD_URL            - Ziel, z. B. https://schule.it-wolf.org
   DASHBOARD_TOKEN          - geteiltes Geheimnis, muss zum gleichnamigen
                              Secret auf dem Pages-Projekt passen
@@ -20,7 +24,6 @@ Zugangsdaten kommen aus Umgebungsvariablen (lokal oder GitHub Secrets):
 Zum Ausprobieren ohne Versand:  python scripts/fetch_data.py --datei out.json
 """
 
-import base64
 import datetime as dt
 import json
 import os
@@ -28,7 +31,6 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib.parse import unquote
 from zoneinfo import ZoneInfo
 
 import requests
@@ -312,140 +314,6 @@ def fetch_iserv(user, password):
     return tasks, debug
 
 
-# -------------------------------------------------------- Google Kalender
-
-# Google kuerzt die Kalender-Domain in der eid auf einen Buchstaben. Gemessen
-# an echten htmlLink-Werten der Calendar-API: gmail.com -> m und
-# group.v.calendar.google.com -> v. Die anderen beiden sind derselbe Bauplan,
-# aber nicht selbst geprueft. Unbekannte Domains bleiben unveraendert.
-EID_DOMAINS = {
-    "gmail.com": "m",                      # geprueft
-    "group.v.calendar.google.com": "v",    # geprueft
-    "group.calendar.google.com": "g",
-    "import.calendar.google.com": "i",
-}
-
-
-def google_calendar_id(ics_url):
-    """Kalender-ID aus der geheimen iCal-Adresse ziehen.
-
-    .../calendar/ical/<kalender-id>/private-<key>/basic.ics
-    """
-    m = re.search(r"/calendar/ical/([^/]+)/", ics_url or "")
-    return unquote(m.group(1)) if m else None
-
-
-def eid_calendar_id(calendar_id):
-    """Kalender-ID so kuerzen, wie Google sie in der eid erwartet.
-
-    "hendrik.wolf.004@gmail.com" -> "hendrik.wolf.004@m". Mit der vollen
-    Adresse findet Google den Termin nicht und zeigt nur die Tagesansicht.
-    """
-    name, sep, domain = (calendar_id or "").rpartition("@")
-    if not sep:
-        return calendar_id
-    return f"{name}@{EID_DOMAINS.get(domain.lower(), domain)}"
-
-
-def google_event_url(ev, calendar_id, day, recurring_uids):
-    """Link zum einzelnen Termin im Google Kalender.
-
-    Google adressiert Termine ueber die "eid": base64 aus "<Termin-ID> <Kalender-ID>",
-    Padding abgeschnitten -- genau das Format, das die Calendar-API als htmlLink
-    liefert. Die Termin-ID steckt in der UID der iCal-Datei (vor dem @). Nur bei
-    Terminen aus einer Serie haengt Google den Zeitstempel der Wiederholung in UTC
-    mit "_" an; bei Einzelterminen wuerde ein Zeitstempel den Link kaputt machen.
-    Achtung: recurring_ical_events setzt RECURRENCE-ID auf jedes Vorkommen, auch
-    auf Einzeltermine; welche UID wirklich eine Serie ist, steht in recurring_uids.
-    Ohne UID oder Kalender-ID gibt es keinen sicheren Link -> Tagesansicht.
-    """
-    day_url = f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
-
-    uid = str(ev.get("UID", "") or "")
-    event_id = uid.split("@")[0].strip()
-    if not event_id or not calendar_id:
-        return day_url
-
-    recur = ev.get("RECURRENCE-ID") if uid in recurring_uids else None
-    if recur is not None:
-        rid = recur.dt
-        if isinstance(rid, dt.datetime):
-            if rid.tzinfo is None:
-                rid = rid.replace(tzinfo=TZ)
-            stamp = rid.astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        else:
-            stamp = rid.strftime("%Y%m%d")
-        event_id = f"{event_id}_{stamp}"
-
-    eid = base64.urlsafe_b64encode(
-        f"{event_id} {eid_calendar_id(calendar_id)}".encode("utf-8")).decode().rstrip("=")
-    return f"https://www.google.com/calendar/event?eid={eid}"
-
-
-def fetch_calendar(ics_url):
-    """Termine von heute bis in 7 Tagen aus der geheimen iCal-Adresse.
-
-    Mehrtaegige Termine (z.B. Ferien) werden auf einzelne Tage aufgeteilt,
-    damit sie an jedem betroffenen Tag auftauchen und nicht nur am ersten.
-    """
-    import icalendar
-    import recurring_ical_events
-
-    resp = requests.get(ics_url, timeout=30)
-    resp.raise_for_status()
-    cal = icalendar.Calendar.from_ical(resp.content)
-    calendar_id = google_calendar_id(ics_url)
-    recurring_uids = {str(c.get("UID", "")) for c in cal.walk("VEVENT") if c.get("RRULE")}
-
-    first_day = dt.datetime.now(TZ).date()
-    last_day = first_day + dt.timedelta(days=7)
-
-    events = []
-    for ev in recurring_ical_events.of(cal).between(first_day, last_day + dt.timedelta(days=1)):
-        dtstart = ev.get("DTSTART").dt
-        dtend = ev.get("DTEND").dt if ev.get("DTEND") else None
-        allday = not isinstance(dtstart, dt.datetime)
-
-        if allday:
-            starts_on = dtstart
-            # DTEND ist bei ganztaegigen Terminen exklusiv (Tag NACH dem letzten)
-            ends_on = (dtend - dt.timedelta(days=1)) if dtend else starts_on
-            start_str = end_str = ""
-        else:
-            local_start = dtstart.astimezone(TZ)
-            local_end = dtend.astimezone(TZ) if isinstance(dtend, dt.datetime) else None
-            starts_on = local_start.date()
-            ends_on = local_end.date() if local_end else starts_on
-            # Ein Termin, der um Mitternacht endet, gehoert noch zum Vortag
-            if local_end and local_end.time() == dt.time(0, 0) and ends_on > starts_on:
-                ends_on -= dt.timedelta(days=1)
-            start_str = local_start.strftime("%H:%M")
-            end_str = local_end.strftime("%H:%M") if local_end else ""
-
-        if ends_on < starts_on:
-            ends_on = starts_on
-        span = (ends_on - starts_on).days + 1
-
-        day = max(starts_on, first_day)
-        while day <= min(ends_on, last_day):
-            events.append({
-                "date": day.isoformat(),
-                # Uhrzeiten nur am tatsaechlichen Anfangs-/Endtag zeigen
-                "start": start_str if day == starts_on else "",
-                "end": end_str if day == ends_on else "",
-                "allday": allday,
-                "title": str(ev.get("SUMMARY", "")),
-                "location": str(ev.get("LOCATION", "") or ""),
-                "url": google_event_url(ev, calendar_id, day, recurring_uids),
-                "until": ends_on.isoformat() if span > 1 else None,
-                "spanDays": span,
-            })
-            day += dt.timedelta(days=1)
-
-    events.sort(key=lambda x: (x["date"], x["start"] or "", x["title"]))
-    return events
-
-
 # ---------------------------------------------------------------- Abliefern
 
 def sende_an_dashboard(data, url, token):
@@ -487,7 +355,6 @@ def main():
         "demo": False,
         "untis": {"ok": False, "error": None, "days": [], "from": None, "to": None},
         "iserv": {"ok": False, "error": None, "tasks": []},
-        "calendar": {"ok": False, "error": None, "events": []},
     }
 
     untis_user = os.environ.get("UNTIS_USER")
@@ -515,20 +382,8 @@ def main():
     else:
         data["iserv"]["error"] = "ISERV_USER/ISERV_PASS nicht gesetzt"
 
-    ics_url = os.environ.get("ICAL_URL")
-    if ics_url:
-        try:
-            data["calendar"]["events"] = fetch_calendar(ics_url)
-            data["calendar"]["ok"] = True
-        except Exception as exc:  # noqa: BLE001
-            data["calendar"]["error"] = str(exc)
-            print(f"Kalender-Fehler: {exc}", file=sys.stderr)
-    else:
-        data["calendar"]["error"] = "ICAL_URL nicht gesetzt"
-
     print(f"  WebUntis: {'OK' if data['untis']['ok'] else data['untis']['error']}")
     print(f"  IServ:    {'OK' if data['iserv']['ok'] else data['iserv']['error']}")
-    print(f"  Kalender: {'OK, ' + str(len(data['calendar']['events'])) + ' Termine' if data['calendar']['ok'] else data['calendar']['error']}")
 
     # --datei schreibt statt zu senden - zum Ansehen, was herauskommt, ohne
     # den Live-Stand anzufassen.
@@ -539,12 +394,12 @@ def main():
         print(f"Geschrieben: {ziel}")
         return 0
 
-    # Wenn KEINE der drei Quellen geliefert hat, lieber gar nicht senden.
+    # Wenn KEINE der beiden Quellen geliefert hat, lieber gar nicht senden.
     # Sonst ersetzt ein Netzausfall im Runner einen brauchbaren Stand durch
-    # drei Fehlermeldungen - und im Dashboard sieht das aus, als waere heute
+    # lauter Fehlermeldungen - und im Dashboard sieht das aus, als waere heute
     # wirklich nichts los. Der alte Stand bleibt stehen und altert sichtbar;
     # ab drei Stunden warnt die Seite von selbst.
-    if not (data["untis"]["ok"] or data["iserv"]["ok"] or data["calendar"]["ok"]):
+    if not (data["untis"]["ok"] or data["iserv"]["ok"]):
         print("Keine einzige Quelle hat geliefert - es wird nichts gesendet.", file=sys.stderr)
         return 1
 

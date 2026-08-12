@@ -45,8 +45,10 @@ export async function onRequestPost({ request, env }) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return json({ error: "Erwartet wird ein JSON-Objekt" }, 400);
   }
-  if (!body.untis && !body.iserv && !body.calendar) {
-    return json({ error: "Keine der drei Quellen (untis, iserv, calendar) ist enthalten" }, 400);
+  // Termine stehen bewusst nicht in dieser Liste: die holt das Dashboard seit
+  // dem 12.08.2026 direkt aus dem Google-Kalender, nicht mehr ueber die Action.
+  if (!body.untis && !body.iserv) {
+    return json({ error: "Weder untis noch iserv sind enthalten" }, 400);
   }
 
   const text = JSON.stringify(body);

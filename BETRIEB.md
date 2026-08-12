@@ -119,25 +119,94 @@ Kachel zeigt dann die Fehlermeldung der Quelle, die anderen bleiben aktuell.
 |---|---|
 | 🕗 Stundenplan | `dashboard_daten` (WebUntis über die Action) |
 | 📝 Aufgaben | `dashboard_daten` (IServ) |
-| 📆 Termine | `dashboard_daten` (iCal) |
+| 📆 Termine | live aus dem Google-Kalender |
 | ✅ ToDos | live aus `todos`/`lists`/`boards` |
 | 🔥 Fokus heute | live aus `gewohnheiten`/`gewohnheit_logs` |
 
-Alles in **einer** Antwort von `GET /api/dashboard`. Drei Anfragen wären drei
-Sitzungsprüfungen und drei Chancen, dass eine Kachel ohne erkennbaren Grund
-leer bleibt. Jede Quelle ist einzeln abgesichert: fällt eine aus, bleibt der
-Rest stehen.
+Alles in **einer** Antwort von `GET /api/dashboard`. Mehrere Anfragen wären
+mehrere Sitzungsprüfungen und mehrere Chancen, dass eine Kachel ohne
+erkennbaren Grund leer bleibt. Jede Quelle ist einzeln abgesichert: fällt eine
+aus, bleibt der Rest stehen.
 
 **ToDos** kommen über `board_members`, nicht über eine `user_id` an `lists` —
 seit den geteilten Listen (21.07.2026) hängen Bereiche an einem Board, und wer
-ein Board sehen darf, steht ausschließlich in `board_members`. Gefiltert wird
-auf die Bereichsnamen aus `TODO_BEREICHE` (Umgebungsvariable, Komma-getrennt;
-ohne sie „Schule, Facharbeit"). Ist die Kachel leer, nennt sie die gesuchten
-Bereiche — eine leere Kachel kann auch heißen, dass ein Bereich umbenannt
-wurde.
+ein Board sehen darf, steht ausschließlich in `board_members`.
+
+**Gezeigt wird alles, was nicht ausdrücklich abgewählt wurde.** Bis zum
+12.08.2026 filterte hier eine feste Namensliste aus der Umgebungsvariablen
+`TODO_BEREICHE` („Schule, Facharbeit"). Das ging genau so lange gut, bis ein
+Bereich umbenannt wurde: „Schule" gab es nicht mehr, und die Kachel verschwieg
+vier von sieben ToDos, ohne dass irgendwo etwas kaputt aussah. Die Variable
+ist ersatzlos weg, gefiltert wird in den Einstellungen.
+
+Der Listenname steht nur vor dem Bereich, wenn es überhaupt mehrere Listen
+gibt — bei einer einzigen wäre er in jeder Zeile dasselbe Wort.
 
 Höchstens 40 ToDos; wird der Deckel erreicht, sagt die Kachel das („… weitere
 in der ToDo-Liste"). Eine stille Kürzung sähe aus wie „mehr ist da nicht".
+Ebenso nennt der Kachelkopf die Zahl der sichtbaren Bereiche, sobald gefiltert
+wird — eine kurze Liste soll nicht wie „mehr ist nicht offen" aussehen.
+
+## Google-Kalender
+
+Die Termine kommen **live** aus dem Google-Kalender des verknüpften Kontos,
+nicht mehr per iCal über die GitHub-Action.
+
+**Verknüpft wird ausschließlich bei todo.it-wolf.org.** Das Dashboard hat
+keinen eigenen OAuth-Weg: Es benutzt dieselbe Datenbank, findet das Konto also
+in `google_konten` und erneuert das Zugriffstoken mit denselben Zugangsdaten.
+Deshalb müssen `GOOGLE_CLIENT_ID` und `GOOGLE_CLIENT_SECRET` auch auf **diesem**
+Pages-Projekt liegen — mit exakt denselben Werten wie bei `todo-app`.
+
+Eine zweite Weiterleitungs-URI in der Google Cloud Console braucht es **nicht**:
+die ist nur für den Zustimmungsdialog nötig, den es hier nicht gibt.
+
+`web/functions/_lib/google.js` ist eine Spiegelung des Lese-Teils aus
+`ToDo/web/functions/_lib/google.js`. **Ein Unterschied ist Absicht:** Meldet
+Google „getrennt", räumt die ToDo-Liste die Zeile aus `google_konten` weg —
+hier nicht. Das Dashboard darf die Verknüpfung der anderen App nicht wegen
+eines eigenen Fehlers löschen; es meldet nur, dass gerade nichts zu holen ist.
+
+Gezeigt wird **nur der Hauptkalender**, erkannt am `primary`-Schalter und
+nicht am Namen — genau wie im ToDo-Kalender. Abonnierte Kalender (Feiertage,
+Geburtstage, Kalenderwochen) würden die Kachel zupflastern.
+
+Die Umformung in das Anzeigeformat steht in `web/functions/_lib/termine.js`
+und hat zwei Fallen, die den Code länger machen, als er aussieht:
+
+- **Zeitzone.** Google liefert Zeitpunkte mit Offset, der Worker läuft in UTC.
+  Welcher Kalendertag das ist, hängt an Europe/Berlin — ein Termin um 0:30 Uhr
+  gehörte sonst auf den Vortag. Jede Umrechnung geht über `Intl` mit fester
+  Zeitzone.
+- **Das Ende ganztägiger Termine ist exklusiv.** Ferien vom 12. bis 25. kommen
+  von Google als start=12., ende=26.
+
+Beides ist mit 24 Proben abgedeckt (Sommer-/Winterzeit, Mitternachtssprung,
+mehrtägig, Ende vor Anfang) — der Testlauf liegt nicht im Repo, die Fälle
+stehen in den Kommentaren der Datei.
+
+## Einstellungen
+
+Liegen **am Konto**, nicht am Gerät: als eigene Zeile in `dashboard_daten`
+unter dem Schlüssel `einstellungen:<user_id>`. Das spart eine eigene Tabelle,
+die Struktur passt genau. Der Schlüssel trägt die user_id, weil zwei Konten
+freigeschaltet sind — ohne sie sähen beide dieselben Filter.
+
+**Gespeichert wird, was VERSTECKT ist**, nicht was sichtbar ist. Der
+Unterschied zeigt sich, sobald ein Bereich dazukommt: so taucht er von selbst
+auf. Bei einer Liste des Sichtbaren bliebe er unsichtbar, bis jemand in die
+Einstellungen sieht — und niemand vermutet ein neues ToDo dort.
+
+Ausnahme ist das **Farbschema**: das bleibt im Browser-Speicher, weil es am
+Gerät hängt (heller Bildschirm im Unterricht, dunkler abends) und nicht an der
+Person.
+
+**Falle, beim Testen gefunden:** Ein einfaches „läuft gerade schon" beim
+Speichern verschluckte den zweiten von zwei schnellen Klicks — er wurde
+übersprungen, und das Neuladen danach setzte das Kästchen wieder auf den alten
+Stand. Zwei Bereiche hintereinander abzuwählen ist aber der Normalfall.
+Jetzt sammelt eine Uhr die Klicks (400 ms) und liest beim Ablauf frisch aus
+dem DOM, statt einen laufenden Vorgang zu blockieren.
 
 **Gewohnheiten:** `web/functions/_lib/tag.js` ist eine **Spiegelung** der
 Regeln aus `Fokus/web/functions/_lib/tag.js` und
@@ -169,7 +238,10 @@ den Fall, dass das Projekt je neu aufgesetzt werden muss.
    selbst das Repo-Root ist — hier liegt es eine Ebene tiefer.
 3. D1-Datenbank **`todo`** als **`DB`** binden (Produktion und Vorschau).
 4. `DASHBOARD_TOKEN` als **Secret** auf dem Pages-Projekt setzen und
-   **denselben Wert** als GitHub-Actions-Secret im Repo.
+   **denselben Wert** als GitHub-Actions-Secret im Repo. Ebenso
+   `GOOGLE_CLIENT_ID` (Variable) und `GOOGLE_CLIENT_SECRET` (Secret) mit
+   exakt den Werten aus dem `todo-app`-Projekt — ohne sie bleibt die
+   Termin-Kachel bei „nicht eingerichtet".
 5. `web/migration-dashboard.sql` gegen die Live-D1 laufen lassen.
 6. Eigene Domain **`schule.it-wolf.org`** zuordnen — **und den CNAME
    anlegen.** Über das Dashboard macht Cloudflare das selbst; über die API
@@ -178,8 +250,8 @@ den Fall, dass das Projekt je neu aufgesetzt werden muss.
 7. GitHub Pages für das Repo abschalten (die alte Adresse zeigt sonst weiter
    auf eine Seite, die es nicht mehr gibt).
 
-Optional als Umgebungsvariablen: `TODO_BEREICHE` (Pages) und `DASHBOARD_URL`
-(GitHub-Repository-Variable, falls die Adresse je wechselt).
+Optional: `DASHBOARD_URL` als GitHub-Repository-Variable, falls die Adresse je
+wechselt.
 
 **Falle:** Neue Umgebungsvariablen auf einem Pages-Projekt greifen erst nach
 einem **frischen Deploy** — ein leerer Commit reicht.

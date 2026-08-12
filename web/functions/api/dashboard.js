@@ -1,38 +1,38 @@
 /**
  * Alles, was das Dashboard anzeigt, in einer Antwort.
  *
- * Drei Quellen, ein Endpunkt:
- *   - `daten`         aus dashboard_daten (Stundenplan, Aufgaben, Termine;
- *                     kommt von der GitHub-Action ueber api/daten.js)
+ * Vier Quellen, ein Endpunkt:
+ *   - `daten`         aus dashboard_daten (Stundenplan und Aufgaben; kommen
+ *                     von der GitHub-Action ueber api/daten.js)
+ *   - `termine`       live aus dem Google-Kalender des verknuepften Kontos
  *   - `todos`         live aus der geteilten Datenbank, dieselben Zeilen, die
  *                     todo.it-wolf.org zeigt
  *   - `gewohnheiten`  live aus den Fokus-Tabellen
  *
- * EIN Endpunkt statt drei, weil die Seite ohnehin alles zusammen braucht: drei
- * Anfragen waeren drei Sitzungspruefungen und drei Chancen, dass eine Kachel
- * ohne erkennbaren Grund leer bleibt.
+ * EIN Endpunkt statt vier, weil die Seite ohnehin alles zusammen braucht:
+ * mehrere Anfragen waeren mehrere Sitzungspruefungen und mehrere Chancen, dass
+ * eine Kachel ohne erkennbaren Grund leer bleibt. Jede Quelle ist einzeln
+ * abgesichert - faellt eine aus, bleibt der Rest stehen.
  *
- * Das Dashboard liest nur. Es gibt bewusst keinen Schreibweg fuer ToDos oder
- * Gewohnheiten - zum Aendern fuehrt der Kachelkopf in die jeweilige App.
+ * Das Dashboard liest nur. Es gibt bewusst keinen Schreibweg fuer ToDos,
+ * Gewohnheiten oder Termine - zum Aendern fuehrt der Kachelkopf in die
+ * jeweilige App.
  */
 
 import { json } from "../_lib/antwort.js";
 import { nutzerOderFehler } from "../_lib/zugang.js";
 import { heutigerStand, montagVon } from "../_lib/tag.js";
-
-/**
- * Welche Bereiche der ToDo-Liste auf dem Dashboard landen.
- *
- * Als Umgebungsvariable ueberschreibbar (`TODO_BEREICHE`, Komma-getrennt),
- * damit ein umbenannter Bereich keinen Deploy braucht. Gemeint sind die
- * BEREICHE (Spalten) innerhalb einer Liste, nicht die Listen selbst.
- */
-const BEREICHE_STANDARD = ["Schule", "Facharbeit"];
+import { liesEinstellungen } from "../_lib/einstellungen.js";
+import { fehltEinrichtung, kontoFuer, frischesZugriffToken, hauptKalender, termineVon } from "../_lib/google.js";
+import { alsKachelTermine, abfrageFenster, tagPlus } from "../_lib/termine.js";
 
 // Deckel gegen eine Kachel, die endlos scrollt. Wird er erreicht, sagt die
 // Antwort das ausdruecklich (`todosGekuerzt`) - eine stille Kuerzung sieht aus
 // wie "mehr ist da nicht".
 const MAX_TODOS = 40;
+
+// Soweit reicht die 7-Tage-Ansicht der Termin-Kachel.
+const TERMIN_TAGE = 7;
 
 const DATUM_MUSTER = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -52,40 +52,57 @@ function heuteVomClient(url) {
   const gewuenscht = url.searchParams.get("heute") || "";
   if (!DATUM_MUSTER.test(gewuenscht)) return utcHeute;
 
-  const grenze = 86400000;
   const abstand = Math.abs(Date.parse(gewuenscht + "T00:00:00Z") - Date.parse(utcHeute + "T00:00:00Z"));
-  return Number.isFinite(abstand) && abstand <= grenze ? gewuenscht : utcHeute;
+  return Number.isFinite(abstand) && abstand <= 86400000 ? gewuenscht : utcHeute;
 }
 
 /**
- * Offene ToDos aus den gewuenschten Bereichen.
+ * Alle Bereiche, die der Nutzer sehen darf, mit der Zahl ihrer offenen ToDos.
  *
  * Der Weg ueber `board_members` ist nicht schmueckend: seit den geteilten
  * Listen (21.07.2026) haengt `lists` an einem Board, nicht mehr direkt an
- * einer user_id. Wer eine Liste sehen darf, steht ausschliesslich in
- * board_members - eine Abfrage ueber `lists.user_id` gaebe es nicht mehr.
+ * einer user_id. Wer eine Liste sehen darf, steht ausschliesslich dort.
+ *
+ * Geliefert werden ALLE Bereiche, auch versteckte - die Einstellungen
+ * brauchen die vollstaendige Liste, um sie zum Anhaken anzubieten.
  */
-async function holeTodos(env, nutzerId, bereiche) {
-  if (!bereiche.length) return { todos: [], gekuerzt: false };
-
-  const platzhalter = bereiche.map(() => "?").join(",");
+async function holeBereiche(env, nutzerId) {
   const zeilen = await env.DB.prepare(
-    `SELECT t.id, t.text, t.note, t.due, l.name AS bereich
+    `SELECT l.id, l.name, b.name AS liste,
+            (SELECT count(*) FROM todos t WHERE t.list_id = l.id AND t.done = 0) AS offene
+       FROM lists l
+       JOIN boards b        ON b.id = l.board_id
+       JOIN board_members m ON m.board_id = b.id AND m.user_id = ?
+      ORDER BY b.name, l.position, l.name`
+  ).bind(nutzerId).all();
+  return zeilen.results || [];
+}
+
+/**
+ * Offene ToDos aus den nicht versteckten Bereichen.
+ *
+ * Bis zum 12.08.2026 filterte hier eine feste Namensliste ("Schule",
+ * "Facharbeit") aus einer Umgebungsvariablen. Das ging genau so lange gut, bis
+ * ein Bereich umbenannt wurde: "Schule" gab es nicht mehr, und die Kachel
+ * verschwieg vier von sieben ToDos, ohne dass irgendwo etwas kaputt aussah.
+ * Jetzt ist alles sichtbar, was nicht ausdruecklich abgewaehlt wurde.
+ */
+async function holeTodos(env, nutzerId, versteckte) {
+  const zeilen = await env.DB.prepare(
+    `SELECT t.id, t.text, t.note, t.due, t.list_id AS bereichId,
+            l.name AS bereich, b.name AS liste
        FROM todos t
        JOIN lists l         ON l.id = t.list_id
        JOIN boards b        ON b.id = l.board_id
        JOIN board_members m ON m.board_id = b.id AND m.user_id = ?
       WHERE t.done = 0
-        AND l.name IN (${platzhalter})
       ORDER BY CASE WHEN t.due IS NULL OR t.due = '' THEN 1 ELSE 0 END,
-               t.due,
-               l.position,
-               t.position
-      LIMIT ?`
-  ).bind(nutzerId, ...bereiche, MAX_TODOS + 1).all();
+               t.due, b.name, l.position, t.position`
+  ).bind(nutzerId).all();
 
-  const alle = zeilen.results || [];
-  return { todos: alle.slice(0, MAX_TODOS), gekuerzt: alle.length > MAX_TODOS };
+  const aus = new Set(versteckte);
+  const sichtbar = (zeilen.results || []).filter((t) => !aus.has(t.bereichId));
+  return { todos: sichtbar.slice(0, MAX_TODOS), gekuerzt: sichtbar.length > MAX_TODOS };
 }
 
 /**
@@ -145,23 +162,47 @@ async function holeGewohnheiten(env, nutzerId, heute) {
   return heraus;
 }
 
+/**
+ * Termine des verknuepften Google-Kontos.
+ *
+ * Verknuepft wird bei todo.it-wolf.org - hier wird nur gelesen. Fehlt die
+ * Verknuepfung, ist das kein Fehler, sondern ein Zustand: die Kachel sagt es
+ * und verlinkt dorthin.
+ */
+async function holeTermine(env, nutzerId, heute) {
+  if (fehltEinrichtung(env)) {
+    return { google: { moeglich: false, verbunden: false }, termine: [] };
+  }
+  const konto = await kontoFuer(env, nutzerId);
+  if (!konto) return { google: { moeglich: true, verbunden: false }, termine: [] };
+
+  const token = await frischesZugriffToken(env, konto);
+  const kalenderId = await hauptKalender(token);
+  if (!kalenderId) {
+    return { google: { moeglich: true, verbunden: true, email: konto.google_email, fehler: "Kein Kalender gefunden" }, termine: [] };
+  }
+
+  const { vonIso, bisIso } = abfrageFenster(heute, TERMIN_TAGE);
+  const roh = await termineVon(token, kalenderId, vonIso, bisIso);
+  return {
+    google: { moeglich: true, verbunden: true, email: konto.google_email },
+    termine: alsKachelTermine(roh, heute, tagPlus(heute, TERMIN_TAGE)),
+  };
+}
+
 export async function onRequestGet({ request, env }) {
   const { fehler, nutzer, nutzerId } = await nutzerOderFehler(request, env);
   if (fehler) return fehler;
 
   const heute = heuteVomClient(new URL(request.url));
-  const bereiche = String(env.TODO_BEREICHE || "")
-    .split(",").map((s) => s.trim()).filter(Boolean);
+  const einstellungen = await liesEinstellungen(env, nutzerId);
 
   const antwort = {
     nutzer: { name: nutzer.name, email: nutzer.email },
     heute,
-    bereiche: bereiche.length ? bereiche : BEREICHE_STANDARD,
+    einstellungen,
   };
 
-  // Jede Quelle einzeln absichern: faellt eine aus, bleibt der Rest stehen.
-  // Ohne das wuerde ein Tippfehler in einem Bereichsnamen die ganze Seite
-  // leeren, obwohl Stundenplan und Termine voellig in Ordnung sind.
   try {
     const zeile = await env.DB.prepare(
       "SELECT json, aktualisiert_am FROM dashboard_daten WHERE schluessel = 'aktuell'"
@@ -177,10 +218,12 @@ export async function onRequestGet({ request, env }) {
   }
 
   try {
-    const { todos, gekuerzt } = await holeTodos(env, nutzerId, antwort.bereiche);
+    antwort.bereiche = await holeBereiche(env, nutzerId);
+    const { todos, gekuerzt } = await holeTodos(env, nutzerId, einstellungen.versteckteBereiche);
     antwort.todos = todos;
     antwort.todosGekuerzt = gekuerzt;
   } catch (e) {
+    antwort.bereiche = [];
     antwort.todos = [];
     antwort.todoFehler = e.message;
   }
@@ -190,6 +233,24 @@ export async function onRequestGet({ request, env }) {
   } catch (e) {
     antwort.gewohnheiten = [];
     antwort.fokusFehler = e.message;
+  }
+
+  try {
+    const { google, termine } = await holeTermine(env, nutzerId, heute);
+    antwort.google = google;
+    antwort.termine = termine;
+  } catch (e) {
+    // "getrennt" heisst: bei Google widerrufen oder abgelaufen. Die Zeile in
+    // google_konten wird hier NICHT geloescht - das ist Sache der ToDo-Liste,
+    // die die Verknuepfung auch angelegt hat.
+    antwort.termine = [];
+    antwort.google = {
+      moeglich: true,
+      verbunden: e.code !== "getrennt",
+      fehler: e.code === "getrennt"
+        ? "Die Google-Verknüpfung ist abgelaufen — in der ToDo-Liste neu verbinden."
+        : e.message,
+    };
   }
 
   return json(antwort);

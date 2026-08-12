@@ -102,51 +102,75 @@
 </main>
 
 <!-- ---------- Einstellungen ---------- -->
-<div class="popup" id="einstellungen" hidden>
-  <div class="popup-box einstellungen">
-    <div class="popup-icon">⚙️</div>
-    <h2>Einstellungen</h2>
+<!-- Aufbau woertlich aus der ToDo-Liste: Kopfzeile mit dem Schliessen-Kreuz
+     ausserhalb des Blaetterbereichs (am Handy fuellt der Dialog den ganzen
+     Bildschirm - ein weggescrolltes ✕ waere dort eine Sackgasse), darunter
+     der einzige Kasten, der blaettert. "Darstellung" ist bewusst kein
+     Akkordeon, sondern einzeilig: er zeigt nur einen einzigen Zustand. -->
+<div class="admin-popup" id="einstellungenPopup" hidden>
+  <div class="admin-popup-box einstellungen">
+    <header class="ein-kopfzeile">
+      <button type="button" id="einstellungenZu" class="ein-schliessen"
+              aria-label="Einstellungen schließen" title="Schließen">✕</button>
+    </header>
 
-    <div class="ein-abschnitt ein-abschnitt-erste ein-zeile">
-      <span class="ein-kopf-icon">🌙</span>
-      <span class="ein-kopf-text">Dunkelmodus</span>
-      <label class="switch">
-        <input type="checkbox" id="dunkelSchalter">
-        <span class="switch-track"><span class="switch-thumb"></span></span>
-      </label>
-    </div>
+    <div class="ein-blaettern">
+      <div id="einstellungenHaupt">
+        <div class="admin-popup-icon">⚙️</div>
+        <h2>Einstellungen</h2>
 
-    <a class="ein-abschnitt ein-zeile ein-link" href="https://todo.it-wolf.org/" target="_blank" rel="noopener">
-      <span class="ein-kopf-icon">✅</span>
-      <span class="ein-kopf-text">ToDo-Liste</span>
-      <span class="ein-kopf-sub">öffnen ↗</span>
-    </a>
-
-    <a class="ein-abschnitt ein-zeile ein-link" href="https://fokus.it-wolf.org/" target="_blank" rel="noopener">
-      <span class="ein-kopf-icon">🔥</span>
-      <span class="ein-kopf-text">Fokus-Tracker</span>
-      <span class="ein-kopf-sub">öffnen ↗</span>
-    </a>
-
-    <details class="ein-abschnitt">
-      <summary class="ein-kopf">
-        <span class="ein-kopf-icon">👤</span>
-        <span class="ein-kopf-text">Konto</span>
-        <span class="ein-kopf-sub" id="kontoSub"></span>
-        <span class="ein-kopf-pfeil">▾</span>
-      </summary>
-      <div class="ein-inhalt">
-        <p class="ein-konto-name" id="kontoName"></p>
-        <p class="ein-konto-mail" id="kontoMail"></p>
-        <div class="ein-gefahrenzone">
-          <p class="hinweis">Abmelden gilt für alle drei Apps — es ist eine Anmeldung, kein eigenes Konto.</p>
-          <button class="btn gefahr" id="abmeldenBtn">Abmelden</button>
+        <div class="ein-abschnitt ein-zeile ein-abschnitt-erste" data-abschnitt="darstellung">
+          <span class="ein-kopf-icon">🎨</span>
+          <span class="ein-kopf-text">Darstellung</span>
+          <label class="switch" id="themeSwitchWrap">
+            <input type="checkbox" id="themeSwitch">
+            <span class="switch-label" id="themeSwitchLabel">Hell</span>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
         </div>
-      </div>
-    </details>
 
-    <div class="popup-knoepfe">
-      <button class="btn" id="einstellungenZu">Schließen</button>
+        <details class="ein-abschnitt" data-abschnitt="bereiche">
+          <summary class="ein-kopf">
+            <span class="ein-kopf-icon">✅</span>
+            <span class="ein-kopf-text">Sichtbare Bereiche</span>
+            <span class="ein-kopf-sub" id="subBereiche"></span>
+            <span class="ein-kopf-pfeil">▾</span>
+          </summary>
+          <div class="ein-inhalt">
+            <p class="ein-hinweis">Welche Bereiche der ToDo-Liste auf dem Dashboard erscheinen. Neue Bereiche sind von selbst dabei.</p>
+            <div id="bereichListe"></div>
+          </div>
+        </details>
+
+        <a class="ein-abschnitt ein-zeile ein-link" href="https://todo.it-wolf.org/" target="_blank" rel="noopener">
+          <span class="ein-kopf-icon">📝</span>
+          <span class="ein-kopf-text">ToDo-Liste</span>
+          <span class="ein-kopf-sub">öffnen ↗</span>
+        </a>
+
+        <a class="ein-abschnitt ein-zeile ein-link" href="https://fokus.it-wolf.org/" target="_blank" rel="noopener">
+          <span class="ein-kopf-icon">🔥</span>
+          <span class="ein-kopf-text">Fokus-Tracker</span>
+          <span class="ein-kopf-sub">öffnen ↗</span>
+        </a>
+
+        <details class="ein-abschnitt" data-abschnitt="konto">
+          <summary class="ein-kopf">
+            <span class="ein-kopf-icon">👤</span>
+            <span class="ein-kopf-text">Konto</span>
+            <span class="ein-kopf-sub" id="kontoSub"></span>
+            <span class="ein-kopf-pfeil">▾</span>
+          </summary>
+          <div class="ein-inhalt">
+            <p class="ein-konto-name" id="kontoName"></p>
+            <p class="ein-konto-mail" id="kontoMail"></p>
+            <div class="ein-gefahrenzone">
+              <p class="ein-hinweis">Abmelden gilt für alle drei Apps — es ist eine Anmeldung, kein eigenes Konto.</p>
+              <button class="btn gefahr" id="abmeldenBtn">Abmelden</button>
+            </div>
+          </div>
+        </details>
+      </div>
     </div>
   </div>
 </div>

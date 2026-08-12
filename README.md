@@ -8,10 +8,11 @@ ToDo-Liste und dem Fokus-Tracker. Wer dort eingeloggt ist, ist es hier auch;
 wer sich hier abmeldet, ist überall abgemeldet.
 
 Alles nur zum Lesen. Zum Ändern führt jeder Kachelkopf in die passende App.
+Welche Bereiche der ToDo-Liste erscheinen, steht in den Einstellungen.
 
-Eine GitHub-Action holt Stundenplan, Aufgaben und Termine viertelstündlich und
-schickt sie an `/api/daten`; das Dashboard gibt sie nur an angemeldete Konten
-heraus.
+Stundenplan und Aufgaben holt eine GitHub-Action viertelstündlich und schickt
+sie an `/api/daten`; Termine, ToDos und Gewohnheiten liest das Dashboard live.
+Der Google-Kalender wird in der ToDo-Liste verknüpft — hier wird nur gelesen.
 
 Privates Hobbyprojekt — nicht zur Nachnutzung gedacht.
 

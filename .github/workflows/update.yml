@@ -31,10 +31,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # `cryptography` ist mit der Verschlüsselung weggefallen: die Daten
-      # liegen jetzt hinter der Anmeldung statt verschlüsselt im Repo.
+      # `cryptography` ist mit der Verschlüsselung weggefallen (die Daten
+      # liegen hinter der Anmeldung statt verschlüsselt im Repo), `icalendar`
+      # und `recurring-ical-events` mit dem iCal-Weg: die Termine holt das
+      # Dashboard direkt aus dem Google-Kalender.
       - name: Abhängigkeiten installieren
-        run: pip install requests beautifulsoup4 tzdata icalendar recurring-ical-events
+        run: pip install requests beautifulsoup4 tzdata
 
       - name: Daten abrufen und senden
         env:
@@ -42,7 +44,6 @@ jobs:
           UNTIS_PASS: ${{ secrets.UNTIS_PASS }}
           ISERV_USER: ${{ secrets.ISERV_USER }}
           ISERV_PASS: ${{ secrets.ISERV_PASS }}
-          ICAL_URL: ${{ secrets.ICAL_URL }}
           DASHBOARD_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
           # Optional. Ohne die Variable geht es an https://schule.it-wolf.org.
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
