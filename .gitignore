@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Lokale Wrangler-Umgebung (enthaelt die Test-D1 als SQLite)
+.wrangler/
+node_modules/

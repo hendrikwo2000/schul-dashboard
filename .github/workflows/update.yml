@@ -5,12 +5,17 @@ on:
     # Täglich alle 15 Minuten zwischen 04:00 und 19:59 UTC
     # (= 6 bis 22 Uhr deutscher Sommerzeit, 5 bis 21 Uhr im Winter).
     # Nachts läuft nichts - das Dashboard warnt deshalb nur tagsüber über
-    # alte Daten (CONFIG.runFrom/runTo in app.js müssen dazu passen).
+    # alte Daten (CONFIG.laufAb/laufBis in web/app.js müssen dazu passen).
     - cron: "*/15 4-19 * * *"
   workflow_dispatch:
 
+# Nur noch lesen. Bis zum 12.08.2026 stand hier "contents: write", weil der
+# Lauf die Daten als data/data.json ins Repo committet hat. Seit dem Umzug auf
+# Cloudflare Pages gehen sie per HTTPS an /api/daten - jeder Commit wäre dort
+# ein Deploy gewesen, und das waren zuletzt rund 310 im Monat bei 500
+# erlaubten. Der Schreibzugriff wird also nicht mehr gebraucht.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: update-data
@@ -26,27 +31,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      # `cryptography` ist mit der Verschlüsselung weggefallen: die Daten
+      # liegen jetzt hinter der Anmeldung statt verschlüsselt im Repo.
       - name: Abhängigkeiten installieren
-        run: pip install requests beautifulsoup4 tzdata icalendar recurring-ical-events cryptography
+        run: pip install requests beautifulsoup4 tzdata icalendar recurring-ical-events
 
-      - name: Daten abrufen
+      - name: Daten abrufen und senden
         env:
           UNTIS_USER: ${{ secrets.UNTIS_USER }}
           UNTIS_PASS: ${{ secrets.UNTIS_PASS }}
           ISERV_USER: ${{ secrets.ISERV_USER }}
           ISERV_PASS: ${{ secrets.ISERV_PASS }}
           ICAL_URL: ${{ secrets.ICAL_URL }}
-          DASHBOARD_PASS: ${{ secrets.DASHBOARD_PASS }}
+          DASHBOARD_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
+          # Optional. Ohne die Variable geht es an https://schule.it-wolf.org.
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
         run: python scripts/fetch_data.py
-
-      - name: Änderungen committen
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/data.json
-          if git diff --cached --quiet; then
-            echo "Keine Änderungen."
-          else
-            git commit -m "Daten aktualisiert"
-            git push
-          fi

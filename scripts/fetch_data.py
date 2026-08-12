@@ -1,9 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Holt Stundenplan (WebUntis) und Aufgaben (IServ) und schreibt data/data.json.
+"""Holt Stundenplan (WebUntis), Aufgaben (IServ) und Termine (iCal) und
+schickt sie an das Dashboard.
+
+Bis zum 12.08.2026 schrieb dieses Skript eine verschluesselte data/data.json
+ins Repo, und die Seite entschluesselte sie im Browser. Seit dem Umzug auf
+Cloudflare Pages geht der Weg ueber HTTPS an /api/daten: jeder Commit waere
+dort ein Deploy, und das waren zuletzt rund 310 im Monat bei 500 erlaubten.
+Die Verschluesselung ist damit weg - die Daten liegen hinter der Anmeldung,
+und was nur der Server herausgibt, muss der Browser nicht verstecken.
 
 Zugangsdaten kommen aus Umgebungsvariablen (lokal oder GitHub Secrets):
   UNTIS_USER, UNTIS_PASS   - WebUntis-Login (wie im Browser)
   ISERV_USER, ISERV_PASS   - IServ-Login (bea-portal.de)
+  ICAL_URL                 - geheime iCal-Adresse des Google-Kalenders
+  DASHBOARD_URL            - Ziel, z. B. https://schule.it-wolf.org
+  DASHBOARD_TOKEN          - geteiltes Geheimnis, muss zum gleichnamigen
+                             Secret auf dem Pages-Projekt passen
+
+Zum Ausprobieren ohne Versand:  python scripts/fetch_data.py --datei out.json
 """
 
 import base64
@@ -12,6 +26,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from urllib.parse import unquote
 from zoneinfo import ZoneInfo
@@ -25,7 +40,13 @@ UNTIS_SERVER = "https://hh5910.webuntis.com"
 UNTIS_SCHOOL = "hh5910"
 ISERV_BASE = "https://bea-portal.de"
 
-OUT_FILE = Path(__file__).resolve().parent.parent / "data" / "data.json"
+DASHBOARD_URL_STANDARD = "https://schule.it-wolf.org"
+
+# Drei Anlaeufe mit wachsender Pause. Deckt den Fall ab, dass Cloudflare oder
+# das Netz des Runners kurz zickt - laenger zu warten lohnt nicht, in 15
+# Minuten kommt der naechste Lauf ohnehin.
+SENDE_VERSUCHE = 3
+SENDE_PAUSE_SEK = 5
 
 
 # ---------------------------------------------------------------- WebUntis
@@ -425,26 +446,37 @@ def fetch_calendar(ics_url):
     return events
 
 
-# --------------------------------------------------------- Verschluesselung
+# ---------------------------------------------------------------- Abliefern
 
-def encrypt_payload(data, password):
-    """Gesamten Datensatz mit AES-256-GCM verschluesseln (Schluessel per
-    PBKDF2 aus dem Passwort). Das Dashboard entschluesselt im Browser."""
-    import base64
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+def sende_an_dashboard(data, url, token):
+    """Den Datensatz an /api/daten schicken. True, wenn er angekommen ist.
 
-    iterations = 250_000
-    salt, iv = os.urandom(16), os.urandom(12)
-    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt,
-                     iterations=iterations).derive(password.encode("utf-8"))
-    ciphertext = AESGCM(key).encrypt(
-        iv, json.dumps(data, ensure_ascii=False).encode("utf-8"), None)
-
-    b64 = lambda b: base64.b64encode(b).decode()  # noqa: E731
-    return {"encrypted": True, "v": 1, "iterations": iterations,
-            "salt": b64(salt), "iv": b64(iv), "data": b64(ciphertext)}
+    Wiederholt wird nur, was sich wiederholen laesst: Netzfehler und 5xx. Ein
+    403 heisst falscher Token und wird beim zweiten Versuch auch nicht besser -
+    dann lieber sofort laut scheitern, damit der Action-Lauf rot wird.
+    """
+    ziel = url.rstrip("/") + "/api/daten"
+    for versuch in range(1, SENDE_VERSUCHE + 1):
+        try:
+            resp = requests.post(
+                ziel,
+                json=data,
+                headers={"X-Dashboard-Token": token},
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            print(f"Versuch {versuch}/{SENDE_VERSUCHE} fehlgeschlagen: {exc}", file=sys.stderr)
+        else:
+            if resp.ok:
+                print(f"Gesendet an {ziel}: {resp.text[:200]}")
+                return True
+            print(f"Versuch {versuch}/{SENDE_VERSUCHE}: HTTP {resp.status_code} - {resp.text[:300]}",
+                  file=sys.stderr)
+            if resp.status_code < 500:
+                return False
+        if versuch < SENDE_VERSUCHE:
+            time.sleep(SENDE_PAUSE_SEK * versuch)
+    return False
 
 
 # ------------------------------------------------------------------- main
@@ -483,12 +515,8 @@ def main():
     else:
         data["iserv"]["error"] = "ISERV_USER/ISERV_PASS nicht gesetzt"
 
-    password = os.environ.get("DASHBOARD_PASS")
     ics_url = os.environ.get("ICAL_URL")
-    if ics_url and not password:
-        # Sicherheitsnetz: private Termine niemals unverschluesselt ins Repo
-        data["calendar"]["error"] = "DASHBOARD_PASS nicht gesetzt - Kalender wird nicht unverschluesselt veroeffentlicht"
-    elif ics_url:
+    if ics_url:
         try:
             data["calendar"]["events"] = fetch_calendar(ics_url)
             data["calendar"]["ok"] = True
@@ -498,16 +526,36 @@ def main():
     else:
         data["calendar"]["error"] = "ICAL_URL nicht gesetzt"
 
-    out = encrypt_payload(data, password) if password else data
-
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OUT_FILE.write_text(json.dumps(out, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
-    print(f"Geschrieben: {OUT_FILE} ({'verschluesselt' if password else 'unverschluesselt'})")
     print(f"  WebUntis: {'OK' if data['untis']['ok'] else data['untis']['error']}")
     print(f"  IServ:    {'OK' if data['iserv']['ok'] else data['iserv']['error']}")
     print(f"  Kalender: {'OK, ' + str(len(data['calendar']['events'])) + ' Termine' if data['calendar']['ok'] else data['calendar']['error']}")
 
+    # --datei schreibt statt zu senden - zum Ansehen, was herauskommt, ohne
+    # den Live-Stand anzufassen.
+    if "--datei" in sys.argv:
+        ziel = Path(sys.argv[sys.argv.index("--datei") + 1])
+        ziel.parent.mkdir(parents=True, exist_ok=True)
+        ziel.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Geschrieben: {ziel}")
+        return 0
+
+    # Wenn KEINE der drei Quellen geliefert hat, lieber gar nicht senden.
+    # Sonst ersetzt ein Netzausfall im Runner einen brauchbaren Stand durch
+    # drei Fehlermeldungen - und im Dashboard sieht das aus, als waere heute
+    # wirklich nichts los. Der alte Stand bleibt stehen und altert sichtbar;
+    # ab drei Stunden warnt die Seite von selbst.
+    if not (data["untis"]["ok"] or data["iserv"]["ok"] or data["calendar"]["ok"]):
+        print("Keine einzige Quelle hat geliefert - es wird nichts gesendet.", file=sys.stderr)
+        return 1
+
+    token = os.environ.get("DASHBOARD_TOKEN")
+    if not token:
+        print("DASHBOARD_TOKEN nicht gesetzt - es wird nichts gesendet.", file=sys.stderr)
+        return 1
+
+    url = os.environ.get("DASHBOARD_URL") or DASHBOARD_URL_STANDARD
+    return 0 if sende_an_dashboard(data, url, token) else 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

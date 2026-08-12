@@ -1,0 +1,3 @@
+# Private Seite hinter einer Anmeldung - in keinen Index.
+User-agent: *
+Disallow: /

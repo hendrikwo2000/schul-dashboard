@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#4f63d2">
+<title>Schul-Dashboard - IT Wolf</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<script>
+  // Farbschema setzen, BEVOR gerendert wird - sonst blitzt beim Laden kurz
+  // die helle Seite auf, auch wenn Dunkel eingestellt ist.
+  document.documentElement.dataset.theme =
+    localStorage.getItem("theme") ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+</script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <h1 id="begruessung">Schul-Dashboard</h1>
+  <button class="btn icon-only" id="einstellungenBtn" title="Einstellungen" hidden>⚙️</button>
+</div>
+
+<div class="banner" id="standWarnung" hidden></div>
+<div class="banner" id="ladeFehler" hidden></div>
+
+<!-- ---------- Vor der Anmeldung ---------- -->
+<!-- Auf der echten Domain springt die Seite von selbst zur Anmeldung bei
+     todo.it-wolf.org (siehe zurAnmeldung() in app.js). Dieser Bildschirm ist
+     der Ausweg fuer die Faelle, in denen das nicht geht oder nicht soll:
+     lokales Testen und der zweite Versuch in derselben Sitzung. -->
+<section class="sperre" id="sperre" hidden>
+  <div class="sperre-box">
+    <div class="popup-icon" id="sperreIcon">🔒</div>
+    <h2 id="sperreTitel">Nicht angemeldet</h2>
+    <p id="sperreText"></p>
+    <a class="btn primary" id="sperreKnopf" href="https://todo.it-wolf.org/">Zur Anmeldung</a>
+  </div>
+</section>
+
+<!-- ---------- Das Dashboard ---------- -->
+<!-- Zwei feste Spalten statt eines Karten-Gitters: bei unterschiedlich hohen
+     Kacheln richtet ein Gitter jede Zeile an der hoechsten aus und reisst
+     darunter Loecher (gemessen: bis 136 px). Die Aufteilung ist die aus dem
+     alten Dashboard - links Schule, rechts der eigene Kram -, der neue
+     Fokus-Ueberblick haengt links an, weil diese Spalte kuerzer war.
+     Auf schmalen Bildschirmen loesen sich die Spalten per display:contents
+     auf und die `order`-Werte legen die Reihenfolge fest. -->
+<main id="tafel" hidden>
+ <div class="spalte">
+  <section class="karte" id="karteStundenplan">
+    <div class="karte-kopf">
+      <h2><a href="https://hh5910.webuntis.com/WebUntis/?school=hh5910" data-app="untis://" data-package="com.grupet.web.app" target="_blank" rel="noopener">🕗 Stundenplan<span class="raus">↗</span></a></h2>
+      <div class="umschalter" role="tablist">
+        <button data-plan="heute" aria-selected="true" role="tab">Heute</button>
+        <button data-plan="woche" aria-selected="false" role="tab">Woche</button>
+      </div>
+    </div>
+    <div class="karte-inhalt" id="stundenplan"></div>
+  </section>
+
+  <section class="karte" id="karteAufgaben">
+    <div class="karte-kopf">
+      <h2><a href="https://bea-portal.de/iserv/exercise" data-app="iserv://" data-package="eu.iserv.webapp" target="_blank" rel="noopener">📝 Aufgaben <span class="leise">IServ</span><span class="raus">↗</span></a></h2>
+    </div>
+    <div class="karte-inhalt" id="aufgaben"></div>
+  </section>
+
+  <section class="karte" id="karteFokus">
+    <div class="karte-kopf">
+      <h2><a href="https://fokus.it-wolf.org/" target="_blank" rel="noopener">🔥 Fokus heute<span class="raus">↗</span></a></h2>
+    </div>
+    <div class="karte-inhalt" id="fokus"></div>
+  </section>
+ </div>
+
+ <div class="spalte">
+  <section class="karte" id="karteTermine">
+    <div class="karte-kopf">
+      <h2><a href="https://calendar.google.com/" data-app="googlecalendar://" target="_blank" rel="noopener">📆 Termine<span class="raus">↗</span></a></h2>
+      <div class="umschalter" role="tablist">
+        <button data-termine="heute" aria-selected="true" role="tab">Heute</button>
+        <button data-termine="woche" aria-selected="false" role="tab">7 Tage</button>
+      </div>
+    </div>
+    <div class="karte-inhalt" id="termine"></div>
+  </section>
+
+  <section class="karte" id="karteTodos">
+    <div class="karte-kopf">
+      <h2><a href="https://todo.it-wolf.org/" target="_blank" rel="noopener">✅ ToDos <span class="leise" id="todoBereiche"></span><span class="raus">↗</span></a></h2>
+    </div>
+    <div class="karte-inhalt" id="todos"></div>
+  </section>
+ </div>
+</main>
+
+<!-- ---------- Einstellungen ---------- -->
+<div class="popup" id="einstellungen" hidden>
+  <div class="popup-box einstellungen">
+    <div class="popup-icon">⚙️</div>
+    <h2>Einstellungen</h2>
+
+    <div class="ein-abschnitt ein-abschnitt-erste ein-zeile">
+      <span class="ein-kopf-icon">🌙</span>
+      <span class="ein-kopf-text">Dunkelmodus</span>
+      <label class="switch">
+        <input type="checkbox" id="dunkelSchalter">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+    </div>
+
+    <a class="ein-abschnitt ein-zeile ein-link" href="https://todo.it-wolf.org/" target="_blank" rel="noopener">
+      <span class="ein-kopf-icon">✅</span>
+      <span class="ein-kopf-text">ToDo-Liste</span>
+      <span class="ein-kopf-sub">öffnen ↗</span>
+    </a>
+
+    <a class="ein-abschnitt ein-zeile ein-link" href="https://fokus.it-wolf.org/" target="_blank" rel="noopener">
+      <span class="ein-kopf-icon">🔥</span>
+      <span class="ein-kopf-text">Fokus-Tracker</span>
+      <span class="ein-kopf-sub">öffnen ↗</span>
+    </a>
+
+    <details class="ein-abschnitt">
+      <summary class="ein-kopf">
+        <span class="ein-kopf-icon">👤</span>
+        <span class="ein-kopf-text">Konto</span>
+        <span class="ein-kopf-sub" id="kontoSub"></span>
+        <span class="ein-kopf-pfeil">▾</span>
+      </summary>
+      <div class="ein-inhalt">
+        <p class="ein-konto-name" id="kontoName"></p>
+        <p class="ein-konto-mail" id="kontoMail"></p>
+        <div class="ein-gefahrenzone">
+          <p class="hinweis">Abmelden gilt für alle drei Apps — es ist eine Anmeldung, kein eigenes Konto.</p>
+          <button class="btn gefahr" id="abmeldenBtn">Abmelden</button>
+        </div>
+      </div>
+    </details>
+
+    <div class="popup-knoepfe">
+      <button class="btn" id="einstellungenZu">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
