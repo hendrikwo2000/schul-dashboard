@@ -9,11 +9,12 @@
  * einen anderen Tagesstand als der Fokus-Tracker selbst, und das faellt
  * niemandem auf, weil beide fuer sich plausibel aussehen.
  *
- * Bewusst NICHT mitgespiegelt sind die Straehnen-Funktionen (straehne,
- * straehneWochentage, straehneXProWoche, straehneFuer) und alles zum Schreiben
- * von Tagen (istDatum, pruefeHeute, pruefeLogDatum, MAX_MENGE). Das Dashboard
- * zeigt keine Flamme und schreibt nichts - toter Code waere hier nur eine
- * zweite Stelle, die beim naechsten Mal mitgepflegt werden muesste.
+ * Bewusst NICHT mitgespiegelt sind die Flammen-Rechnung (flammenZahl - bis zum
+ * 14.08.2026 hiess sie straehne/straehneWochentage/straehneXProWoche/
+ * straehneFuer und zaehlte Tage in Folge) und alles zum Schreiben von Tagen
+ * (istDatum, pruefeHeute, pruefeLogDatum, MAX_MENGE). Das Dashboard zeigt
+ * keine Flamme und schreibt nichts - toter Code waere hier nur eine zweite
+ * Stelle, die beim naechsten Mal mitgepflegt werden muesste.
  */
 
 // Datum um n Tage verschieben. Rechnung in UTC, weil hier reine Kalendertage
