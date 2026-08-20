@@ -156,6 +156,18 @@ main[hidden] { display: none; }
 
 .spalte { display: contents; }
 
+.tafel-leer {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.tafel-leer[hidden] { display: none; }
+
 /* Reihenfolge auf schmalen Bildschirmen. Die Werte steigen innerhalb jeder
    Spalte an, deshalb aendern sie in der Zwei-Spalten-Ansicht nichts. */
 #karteStundenplan { order: 1; }
@@ -166,6 +178,7 @@ main[hidden] { display: none; }
 
 @media (min-width: 900px) {
   main { grid-template-columns: 1fr 1fr; }
+  main.einspaltig { grid-template-columns: 1fr; }
   .spalte { display: flex; flex-direction: column; gap: 14px; }
 }
 
@@ -175,6 +188,10 @@ main[hidden] { display: none; }
   border-radius: 14px;
   padding: 14px 16px 16px;
 }
+/* Abgewaehlte Kacheln. Eigene display-Regeln hat .karte zwar keine - die
+   Zeile steht trotzdem, weil das in diesem Projekt schon zweimal die Falle
+   war (siehe BETRIEB.md). */
+.karte[hidden] { display: none; }
 /* Steckt etwas Dringendes in der Kachel (roter Punkt), erbt sie den Ton -
    damit das Auge zuerst dort landet, ohne dass man jede Zeile liest. */
 .karte.dringend { border-color: var(--red); }
@@ -284,6 +301,25 @@ a.zeile:hover { border-color: var(--accent); }
 .zeile.entfaellt .marke { background: var(--del-soft); color: var(--red); }
 .zeile.vertretung { border-left: 4px solid var(--yellow); }
 .zeile.vertretung .marke { background: var(--col-bg); color: var(--yellow); }
+
+/* Eine Stunde laesst sich umbenennen - Untis nennt hier jedes Lernfeld
+   gleich. Der Zeiger ist der einzige Hinweis darauf: ein Stift in jeder Zeile
+   waere Laerm in einer Kachel, die man meistens nur liest. */
+.zeile.umbenennbar { cursor: pointer; }
+.zeile.umbenennbar:hover { border-color: var(--accent); }
+.zeile.umbenennbar:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.titel-eingabe {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--col-bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+.titel-eingabe:focus { outline: none; }
 
 /* Farbpunkt fuer die Dringlichkeit (Aufgaben, ToDos). */
 .punkt { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
@@ -438,7 +474,78 @@ a.dauer:hover { filter: brightness(.97); }
 .bereich-zeile .zahl {
   flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
 }
-#bereichListe { display: flex; flex-direction: column; gap: 6px; }
+#bereichListe, #kartenListe, #stundenListe { display: flex; flex-direction: column; gap: 6px; }
+
+/* Eine Kachel: zwei Pfeile fuer die Reihenfolge, dann Haekchen und Name.
+   Der Name sitzt im <label>, die Pfeile ausserhalb - laegen sie darin, wuerde
+   jeder Pfeilklick auch das Haekchen umlegen. */
+.karten-zeile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.karten-zeile .name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  overflow-wrap: anywhere;
+}
+.karten-zeile input { flex: none; width: 17px; height: 17px; accent-color: var(--accent); }
+
+.pfeil {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--col-bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  /* Grosszuegiges Polster statt der 26 px, die Schrift und Rand allein
+     ergeben - danebengetippt heisst hier "falsche Kachel verschoben". */
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.pfeil:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pfeil:disabled { opacity: .3; cursor: default; }
+
+/* Ein eigener Name fuer eine Stunde. Die Uhrzeit-Spalte ist so breit, dass
+   "Mi 11:45" hineinpasst, damit die Felder untereinander fluchten. */
+.stunden-zeile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stunden-zeile .wann {
+  flex: none;
+  width: 66px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.stunden-zeile input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  background: var(--row);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 9px;
+}
+.stunden-zeile input[type="text"]:focus { border-color: var(--accent); outline: none; }
+.stunden-zeile .alt-name { flex: 1; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
 
 .ein-abschnitt {
   display: flex; flex-direction: column;

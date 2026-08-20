@@ -196,22 +196,139 @@ function zeichneStandWarnung() {
 }
 
 // ---------------------------------------------------------------- Stundenplan
-function stundeHtml(s) {
+/**
+ * Der Schluessel, an dem ein eigener Stundenname haengt.
+ *
+ * WebUntis nennt hier jedes Lernfeld gleich ("Lernfeld", Kuerzel "FST-LF") -
+ * im Plan stehen dann vier Stunden mit demselben Namen, und keine sagt,
+ * welches Lernfeld sie ist. Der eigene Name haengt deshalb an
+ * WOCHENTAG + STARTZEIT + FACHKUERZEL: genau der Teil, der sich jede Woche
+ * wiederholt. Einmal eingetragen, steht er ab dann jede Woche wieder da.
+ *
+ * Nicht am Datum - dann waere er naechste Woche weg. Nicht am Fach allein -
+ * dann hiessen alle Lernfelder wieder gleich.
+ */
+function stundenSchluessel(datum, stunde) {
+  const tag = new Date(datum + "T00:00:00").getDay();
+  return `${tag}|${stunde.start}|${stunde.subjectShort || stunde.subject || "?"}`;
+}
+
+function eigenerName(schluessel) {
+  return (stand?.einstellungen?.stundenNamen || {})[schluessel] || "";
+}
+
+function schluesselText(schluessel) {
+  const [tag, start] = String(schluessel).split("|");
+  const name = WOCHENTAGE[Number(tag)];
+  return `${name ? name.slice(0, 2) : "?"} ${start || ""}`.trim();
+}
+
+/**
+ * Doppel- und Dreifachstunden zu EINER Zeile zusammenfassen.
+ *
+ * Untis traegt einen Block als mehrere Stunden ein (11:45-13:15 und
+ * 13:30-15:00). Auf dem Dashboard ist das ein Termin und nicht zwei - also
+ * eine Zeile "11:45 / 15:00". Wie lang die Pause dazwischen ist, spielt
+ * keine Rolle; nur eine ANDERE Stunde dazwischen trennt den Block.
+ *
+ * Zusammengefasst wird nur, was wirklich dasselbe ist: gleiches Fach,
+ * gleicher Lehrer, gleicher Raum, gleicher Status. Faellt die zweite Haelfte
+ * aus, bleiben die Zeilen getrennt - genau das will man dann sehen.
+ */
+function fasseZusammen(stunden) {
+  const FELDER = ["subject", "subjectShort", "room", "teacher", "code", "info"];
+  const gleich = (a, b) => FELDER.every((f) => (a[f] || "") === (b[f] || ""));
+
+  const heraus = [];
+  for (const s of stunden) {
+    const letzte = heraus[heraus.length - 1];
+    if (letzte && gleich(letzte, s)) {
+      letzte.end = s.end;   // die Liste ist sortiert, s ist also die spaetere
+      continue;
+    }
+    heraus.push({ ...s });
+  }
+  return heraus;
+}
+
+function stundeHtml(s, datum) {
   const art = s.code === "cancelled" ? "entfaellt" : s.code === "irregular" ? "vertretung" : "";
   const marke =
     s.code === "cancelled" ? '<span class="marke">Entfällt</span>' :
     s.code === "irregular" ? '<span class="marke">Vertretung</span>' : "";
   const unter = [s.room, s.teacher, s.info].filter(Boolean).join(" · ");
+  const schluessel = stundenSchluessel(datum, s);
   return `
-    <div class="zeile ${art}">
+    <div class="zeile umbenennbar ${art}" data-schluessel="${esc(schluessel)}"
+         title="Klicken zum Umbenennen" tabindex="0">
       <div class="uhr">${esc(s.start)}<br>${esc(s.end)}</div>
       <div class="haupt">
-        <div class="titel">${esc(s.subject)}</div>
+        <div class="titel">${esc(eigenerName(schluessel) || s.subject)}</div>
         ${unter ? `<div class="unter">${esc(unter)}</div>` : ""}
       </div>
       ${marke}
     </div>`;
 }
+
+/**
+ * Eine Stunde umbenennen: der Fachname wird an Ort und Stelle zum Eingabefeld.
+ *
+ * Enter und der Klick daneben speichern, Escape verwirft, ein leeres Feld
+ * holt den Namen aus WebUntis zurueck. Ein eigener Dialog waere fuer ein
+ * einzelnes Textfeld zu viel Aufwand - und am Handy zwei Klicks mehr.
+ */
+function starteUmbenennen(zeile) {
+  const titel = zeile.querySelector(".titel");
+  if (!titel) return;
+  const schluessel = zeile.dataset.schluessel;
+
+  const eingabe = document.createElement("input");
+  eingabe.type = "text";
+  eingabe.className = "titel-eingabe";
+  eingabe.maxLength = 60;
+  eingabe.value = eigenerName(schluessel);
+  eingabe.placeholder = titel.textContent;
+  titel.replaceWith(eingabe);
+  eingabe.focus();
+  eingabe.select();
+
+  let fertig = false;
+  const beenden = (speichern) => {
+    if (fertig) return;   // blur feuert auch, wenn Enter schon gespeichert hat
+    fertig = true;
+    if (speichern) setzeStundenName(schluessel, eingabe.value);
+    zeichneStundenplan();
+    markiereDringend();
+  };
+
+  eingabe.addEventListener("keydown", (e) => {
+    e.stopPropagation();   // sonst faengt die Zeile das Enter gleich wieder ab
+    if (e.key === "Enter") { e.preventDefault(); beenden(true); }
+    if (e.key === "Escape") { e.preventDefault(); beenden(false); }
+  });
+  eingabe.addEventListener("blur", () => beenden(true));
+}
+
+function setzeStundenName(schluessel, name) {
+  const namen = { ...(stand?.einstellungen?.stundenNamen || {}) };
+  const sauber = (name || "").trim().slice(0, 60);
+  if (sauber) namen[schluessel] = sauber;
+  else delete namen[schluessel];   // leer heisst: wieder der Name aus Untis
+  setzeEinstellung({ stundenNamen: namen });
+}
+
+$("#stundenplan").addEventListener("click", (e) => {
+  const zeile = e.target.closest(".zeile.umbenennbar");
+  if (zeile && zeile.isConnected && !zeile.querySelector("input")) starteUmbenennen(zeile);
+});
+
+$("#stundenplan").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const zeile = e.target.closest?.(".zeile.umbenennbar");
+  if (!zeile || !zeile.isConnected || zeile.querySelector("input")) return;
+  e.preventDefault();
+  starteUmbenennen(zeile);
+});
 
 function zeichneStundenplan() {
   const el = $("#stundenplan");
@@ -238,7 +355,7 @@ function zeichneStundenplan() {
     ${planAnsicht === "woche" || t.date !== heute
       ? `<div class="tag-titel ${t.date === heute ? "heute" : ""}">${esc(langesDatum(t.date))}</div>`
       : ""}
-    ${t.lessons.map(stundeHtml).join("")}
+    ${fasseZusammen(t.lessons).map((s) => stundeHtml(s, t.date)).join("")}
   `).join("");
 }
 
@@ -469,6 +586,76 @@ function zeichneFokus() {
     gewohnheiten.map(gewohnheitHtml).join("");
 }
 
+// ---------------------------------------------------------------- Kacheln
+/**
+ * Welche Kacheln es gibt. Die Reihenfolge hier gilt, solange nichts anderes
+ * eingestellt ist.
+ */
+const KARTEN = [
+  { id: "stundenplan", el: "#karteStundenplan", name: "Stundenplan", icon: "🕗" },
+  { id: "termine",     el: "#karteTermine",     name: "Termine",     icon: "📆" },
+  { id: "aufgaben",    el: "#karteAufgaben",    name: "Aufgaben",    icon: "📝" },
+  { id: "todos",       el: "#karteTodos",       name: "ToDos",       icon: "✅" },
+  { id: "fokus",       el: "#karteFokus",       name: "Fokus heute", icon: "🔥" },
+];
+
+/**
+ * Die Reihenfolge, wie sie WIRKLICH gilt: das Gespeicherte zuerst, alles
+ * Unbekannte hinten dran. Kaeme je eine Kachel dazu, taucht sie damit von
+ * selbst auf, statt unsichtbar zu bleiben - dasselbe Prinzip wie bei den
+ * Bereichen.
+ */
+function kartenReihenfolge() {
+  const gespeichert = (stand?.einstellungen?.kartenReihenfolge || [])
+    .filter((id) => KARTEN.some((k) => k.id === id));
+  return [...gespeichert, ...KARTEN.map((k) => k.id).filter((id) => !gespeichert.includes(id))];
+}
+
+/**
+ * Kacheln ein- und ausblenden und auf die beiden Spalten verteilen.
+ *
+ * Am Handy loesen sich die Spalten per `display: contents` auf, dort zaehlt
+ * allein `order` - jede Kachel bekommt ihre Nummer deshalb als Inline-Stil.
+ * (Die festen order-Werte im CSS sind nur noch der Notnagel, falls das hier
+ * nie laeuft.) Am grossen Bildschirm zaehlt dagegen, in WELCHER Spalte die
+ * Kachel steckt: abwechselnd links und rechts, also in Leserichtung.
+ *
+ * Ausgeblendete Kacheln wandern ans Ende der linken Spalte. Sie sind
+ * unsichtbar, aber ihr Platz im DOM soll trotzdem festliegen - sonst haengt
+ * das Ergebnis davon ab, wo sie zufaellig standen, als sie abgewaehlt wurden.
+ */
+function ordneKarten() {
+  const spalten = [...document.querySelectorAll("#tafel .spalte")];
+  if (spalten.length < 2) return;
+
+  const versteckt = new Set(stand?.einstellungen?.versteckteKarten || []);
+  const soll = [[], []];
+  const aus = [];
+  let platz = 0;
+
+  for (const id of kartenReihenfolge()) {
+    const el = $(KARTEN.find((k) => k.id === id).el);
+    if (!el) continue;
+    if (versteckt.has(id)) { el.hidden = true; aus.push(el); continue; }
+    el.hidden = false;
+    el.style.order = String(platz + 1);
+    soll[platz % 2].push(el);
+    platz++;
+  }
+  soll[0].push(...aus);
+
+  // Bleibt nur eine Kachel uebrig, waere die zweite Spalte leerer Platz und
+  // die Kachel stuende auf halber Breite.
+  $("#tafel").classList.toggle("einspaltig", platz <= 1);
+  $("#tafelLeer").hidden = platz > 0;
+
+  spalten.forEach((spalte, i) => {
+    const ist = [...spalte.children];
+    const stimmt = ist.length === soll[i].length && ist.every((el, n) => el === soll[i][n]);
+    if (!stimmt) soll[i].forEach((el) => spalte.appendChild(el));
+  });
+}
+
 // ---------------------------------------------------------------- Zeichnen
 /**
  * Der rote Punkt steckt schon in den Eintraegen (ueberfaellig/heute/morgen) -
@@ -483,6 +670,7 @@ function markiereDringend() {
 function zeichneAlles() {
   $("#begruessung").textContent = begruessung();
   zeichneStandWarnung();
+  ordneKarten();
   zeichneStundenplan();
   zeichneTermine();
   zeichneAufgaben();
@@ -493,8 +681,11 @@ function zeichneAlles() {
   // Steht das Popup offen (etwa beim 10-Minuten-Nachladen), die Zahlen dort
   // mitziehen - sonst zeigt es "2 offen", waehrend die Kachel daneben schon
   // drei hat.
+  // Die Stundennamen bleiben absichtlich stehen: ein Neuzeichnen mitten im
+  // Tippen wuerde das Feld unter den Fingern austauschen.
   if (!$("#einstellungenPopup").hidden) {
     zeichneBereiche();
+    zeichneKarten();
     zeichneGoogle();
   }
 }
@@ -572,6 +763,8 @@ function zeichneGoogle() {
 function oeffneEinstellungen() {
   resetAkkordeon();
   zeichneBereiche();
+  zeichneKarten();
+  zeichneStundenNamen();
   zeichneGoogle();
   $("#einstellungenPopup").hidden = false;
 }
@@ -627,16 +820,34 @@ function zeichneBereiche() {
   });
 }
 
-// Klicks werden gesammelt, statt jeden einzeln zu schicken.
+// Aenderungen werden gesammelt, statt jede einzeln zu schicken.
 //
 // FALLE, beim Testen gefunden: Ein einfaches "laeuft gerade schon" haette den
 // zweiten von zwei schnellen Klicks stillschweigend verschluckt - er wurde
 // uebersprungen, und das Neuladen danach setzte das Kaestchen wieder auf den
 // alten Stand. Wer zwei Bereiche hintereinander abwaehlt, ist aber der
-// Normalfall, nicht die Ausnahme. Jetzt zaehlt der ZULETZT geklickte Zustand:
-// die Uhr wird bei jedem Klick neu gestellt und liest beim Ablauf frisch aus
-// dem DOM.
+// Normalfall, nicht die Ausnahme. Jetzt zaehlt der ZULETZT gesetzte Zustand:
+// jede Aenderung landet sofort in `stand.einstellungen`, die Uhr wird neu
+// gestellt und schickt beim Ablauf genau das, was dort steht.
 let speicherUhr = null;
+let nachladenNoetig = false;
+
+/**
+ * Eine Einstellung uebernehmen: sofort in den Speicher, kurz darauf zum
+ * Server.
+ *
+ * `nachladen` nur dort, wo der Server das Ergebnis mitbestimmt - die
+ * Bereichsfilter wirken in der Datenbankabfrage, und nur von dort stimmt auch
+ * die Zahl der gekuerzten Eintraege. Kachelreihenfolge und Stundennamen sind
+ * reine Anzeige; ein Neuladen dafuer waere eine Anfrage ohne neue Auskunft.
+ */
+function setzeEinstellung(teil, { nachladen = false } = {}) {
+  if (!stand) return;
+  stand.einstellungen = { ...stand.einstellungen, ...teil };
+  nachladenNoetig = nachladenNoetig || nachladen;
+  clearTimeout(speicherUhr);
+  speicherUhr = setTimeout(schickeEinstellungen, 400);
+}
 
 function aktuellVersteckte() {
   return [...document.querySelectorAll("#bereichListe input[data-bereich]")]
@@ -646,39 +857,189 @@ function aktuellVersteckte() {
 
 function speichereBereiche() {
   const versteckteBereiche = aktuellVersteckte();
-
-  // Sofort im Speicher nachziehen, damit Kachel und Kopfzeile ohne Umweg
-  // ueber den Server stimmen.
-  if (stand) stand.einstellungen = { ...stand.einstellungen, versteckteBereiche };
   const gesamt = (stand?.bereiche || []).length;
   $("#subBereiche").textContent = `${gesamt - versteckteBereiche.length} von ${gesamt}`;
+
+  // Erst in den Speicher, dann zeichnen - die Kachel liest von dort.
+  setzeEinstellung({ versteckteBereiche }, { nachladen: true });
   zeichneTodos();
   markiereDringend();
-
-  clearTimeout(speicherUhr);
-  speicherUhr = setTimeout(schickeEinstellungen, 400);
 }
 
+/**
+ * PUT ersetzt den Block als GANZES. Deshalb geht immer alles mit, auch die
+ * Felder, die gerade niemand angefasst hat: schickte man nur das geaenderte
+ * Feld, setzte der Server die uebrigen auf ihren Standard zurueck - ein
+ * umbenanntes Fach loeschte dann die Bereichsfilter.
+ */
 async function schickeEinstellungen() {
-  const versteckteBereiche = aktuellVersteckte();
+  const e = stand?.einstellungen || {};
+  const nachladen = nachladenNoetig;
+  nachladenNoetig = false;
   try {
     const antwort = await fetch("/api/einstellungen", {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ versteckteBereiche }),
+      body: JSON.stringify({
+        versteckteBereiche: e.versteckteBereiche || [],
+        stundenNamen: e.stundenNamen || {},
+        kartenReihenfolge: e.kartenReihenfolge || [],
+        versteckteKarten: e.versteckteKarten || [],
+      }),
     });
     if (!antwort.ok) throw new Error("HTTP " + antwort.status);
   } catch (e) {
+    nachladenNoetig = nachladen;   // beim naechsten Versuch nachholen
     const el = $("#ladeFehler");
     el.textContent = "⚠️ Einstellung konnte nicht gespeichert werden — sie gilt nur auf diesem Gerät, bis es wieder klappt.";
     el.classList.add("warnung");
     el.hidden = false;
     return;
   }
-  // Erst jetzt frisch holen: der Filter wirkt im Server, und nur von dort
-  // stimmt auch die Zahl der gekuerzten Eintraege.
-  laden();
+  if (nachladen) laden();
+}
+
+// ---------------------------------------------------------------- Kachel-Liste
+/**
+ * Die Kacheln zum Sortieren und Abwaehlen.
+ *
+ * Pfeile statt Ziehen: Drag-and-drop ist am Handy fummelig und braucht fuer
+ * fuenf Zeilen deutlich mehr Code, als es hier einbringt.
+ */
+function zeichneKarten() {
+  const el = $("#kartenListe");
+  const reihe = kartenReihenfolge();
+  const versteckt = new Set(stand?.einstellungen?.versteckteKarten || []);
+  $("#subKarten").textContent = `${reihe.length - versteckt.size} von ${reihe.length}`;
+
+  el.innerHTML = reihe.map((id, i) => {
+    const k = KARTEN.find((x) => x.id === id);
+    return `
+    <div class="karten-zeile" data-karte="${esc(id)}">
+      <button type="button" class="pfeil" data-richtung="hoch"
+              aria-label="${esc(k.name)} nach oben"${i === 0 ? " disabled" : ""}>&#8593;</button>
+      <button type="button" class="pfeil" data-richtung="runter"
+              aria-label="${esc(k.name)} nach unten"${i === reihe.length - 1 ? " disabled" : ""}>&#8595;</button>
+      <label class="name">
+        <input type="checkbox" data-karte="${esc(id)}"${versteckt.has(id) ? "" : " checked"}>
+        <span>${k.icon} ${esc(k.name)}</span>
+      </label>
+    </div>`;
+  }).join("");
+
+  el.querySelectorAll(".pfeil").forEach((knopf) => {
+    knopf.addEventListener("click", () => {
+      verschiebeKarte(knopf.closest(".karten-zeile").dataset.karte, knopf.dataset.richtung);
+    });
+  });
+
+  el.querySelectorAll("input[data-karte]").forEach((box) => {
+    box.addEventListener("change", () => {
+      const versteckteKarten = [...el.querySelectorAll("input[data-karte]")]
+        .filter((b) => !b.checked)
+        .map((b) => b.dataset.karte);
+      setzeEinstellung({ versteckteKarten });
+      ordneKarten();
+      markiereDringend();
+      zeichneKarten();
+    });
+  });
+}
+
+function verschiebeKarte(id, richtung) {
+  const reihe = kartenReihenfolge();
+  const von = reihe.indexOf(id);
+  const nach = von + (richtung === "hoch" ? -1 : 1);
+  if (von < 0 || nach < 0 || nach >= reihe.length) return;
+  [reihe[von], reihe[nach]] = [reihe[nach], reihe[von]];
+
+  setzeEinstellung({ kartenReihenfolge: reihe });
+  ordneKarten();
+  markiereDringend();
+  zeichneKarten();
+
+  // Die Liste ist neu gezeichnet, der geklickte Knopf also weg. Ohne das hier
+  // laege der Fokus wieder am Anfang und man muesste sich zum zweiten Klick
+  // erst zurueckhangeln.
+  const zeile = $(`#kartenListe .karten-zeile[data-karte="${id}"]`);
+  const knopf = zeile?.querySelector(`.pfeil[data-richtung="${richtung}"]`);
+  (knopf && !knopf.disabled ? knopf : zeile?.querySelector(".pfeil:not(:disabled)"))?.focus();
+}
+
+// ---------------------------------------------------------------- Stundennamen
+/**
+ * Jede Stunde der geladenen Woche einmal - nach Wochentag und Uhrzeit, so wie
+ * der eigene Name auch daran haengt. Zwei gleiche Stunden an zwei Tagen sind
+ * zwei Eintraege, zwei Bloecke desselben Tages nur einer.
+ */
+function stundenSlots() {
+  const gesehen = new Map();
+  for (const tag of stand?.daten?.untis?.days || []) {
+    const wochentag = new Date(tag.date + "T00:00:00").getDay();
+    for (const s of fasseZusammen(tag.lessons || [])) {
+      const schluessel = stundenSchluessel(tag.date, s);
+      if (!gesehen.has(schluessel)) {
+        gesehen.set(schluessel, { schluessel, wochentag, start: s.start, fach: s.subject });
+      }
+    }
+  }
+  return [...gesehen.values()]
+    .sort((a, b) => (a.wochentag || 7) - (b.wochentag || 7) || a.start.localeCompare(b.start));
+}
+
+function zeichneStundenNamen() {
+  const el = $("#stundenListe");
+  const namen = stand?.einstellungen?.stundenNamen || {};
+  const slots = stundenSlots();
+  const bekannt = new Set(slots.map((s) => s.schluessel));
+  // Namen fuer Stunden, die es diese Woche nicht gibt: sonst waeren sie nur
+  // noch loeschbar, indem man auf die Woche wartet, in der sie wieder
+  // auftauchen.
+  const verwaist = Object.keys(namen).filter((k) => !bekannt.has(k));
+  const zahl = Object.keys(namen).length;
+  $("#subStunden").textContent = zahl ? `${zahl} eigene` : "";
+
+  if (!slots.length && !verwaist.length) {
+    el.innerHTML = '<p class="ein-hinweis">Noch kein Stundenplan geladen.</p>';
+    return;
+  }
+
+  el.innerHTML = slots.map((s) => `
+    <label class="stunden-zeile">
+      <span class="wann">${esc(WOCHENTAGE[s.wochentag].slice(0, 2))} ${esc(s.start)}</span>
+      <input type="text" maxlength="60" data-schluessel="${esc(s.schluessel)}"
+             value="${esc(namen[s.schluessel] || "")}" placeholder="${esc(s.fach)}">
+    </label>`).join("")
+    + (verwaist.length ? `
+      <p class="ein-hinweis">Nicht im Plan dieser Woche:</p>
+      ${verwaist.map((k) => `
+        <div class="stunden-zeile">
+          <span class="wann">${esc(schluesselText(k))}</span>
+          <span class="alt-name">${esc(namen[k])}</span>
+          <button type="button" class="pfeil" data-loeschen="${esc(k)}"
+                  aria-label="Namen löschen">&#10005;</button>
+        </div>`).join("")}` : "");
+
+  el.querySelectorAll("input[data-schluessel]").forEach((feld) => {
+    // "change" statt "input": gespeichert wird, wenn das Feld fertig ist,
+    // nicht bei jedem Buchstaben.
+    feld.addEventListener("change", () => {
+      setzeStundenName(feld.dataset.schluessel, feld.value);
+      zeichneStundenplan();
+      $("#subStunden").textContent =
+        Object.keys(stand?.einstellungen?.stundenNamen || {}).length
+          ? `${Object.keys(stand.einstellungen.stundenNamen).length} eigene` : "";
+    });
+  });
+
+  el.querySelectorAll("button[data-loeschen]").forEach((knopf) => {
+    knopf.addEventListener("click", () => {
+      setzeStundenName(knopf.dataset.loeschen, "");
+      zeichneStundenplan();
+      zeichneStundenNamen();
+    });
+  });
 }
 
 $("#abmeldenBtn").addEventListener("click", async () => {

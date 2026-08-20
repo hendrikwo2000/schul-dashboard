@@ -128,6 +128,40 @@ mehrere Sitzungsprüfungen und mehrere Chancen, dass eine Kachel ohne
 erkennbaren Grund leer bleibt. Jede Quelle ist einzeln abgesichert: fällt eine
 aus, bleibt der Rest stehen.
 
+### Stundenplan: Blöcke und eigene Namen
+
+**Doppelstunden sind eine Zeile.** Untis trägt einen Block als mehrere
+Stunden ein (11:45–13:15 und 13:30–15:00); auf dem Dashboard steht dafür
+eine Zeile „11:45 / 15:00". Zusammengefasst wird nur, was wirklich dasselbe
+ist — gleiches Fach, gleicher Lehrer, gleicher Raum, gleicher Status. Fällt
+die zweite Hälfte aus, bleiben die Zeilen getrennt, denn genau das will man
+dann sehen. Wie lang die Pause dazwischen ist, spielt keine Rolle (so
+gewünscht); nur eine **andere** Stunde dazwischen trennt den Block.
+
+**Eigene Namen** gibt es, weil WebUntis an dieser Schule jedes Lernfeld gleich
+nennt: `subject` ist überall „Lernfeld", `subjectShort` überall „FST-LF".
+Im Plan stünden sonst vier Stunden mit demselben Namen, und keine sagt,
+welches Lernfeld sie ist.
+
+Der Name hängt an **Wochentag + Startzeit + Fachkürzel** (`4|11:45|FST-LF`) —
+genau dem Teil, der sich jede Woche wiederholt. Einmal eingetragen, steht er
+ab dann jede Woche wieder da. Nicht am Datum, sonst wäre er nächste Woche
+weg; nicht am Fach allein, sonst hießen alle Lernfelder wieder gleich. Zwei
+Blöcke desselben Tages sind **ein** Eintrag, weil der Schlüssel am Anfang des
+zusammengefassten Blocks hängt.
+
+Eingetragen wird an zwei Stellen: Klick auf die Stunde in der Kachel (Enter
+speichert, Escape verwirft) und in den Einstellungen unter „Namen im
+Stundenplan". Ein **leeres Feld** heißt „wieder der Name aus WebUntis" — es
+gibt also keinen eigenen Löschknopf. Namen für Stunden, die diese Woche nicht
+im Plan stehen, listen die Einstellungen unten mit ✕ auf; sonst wären sie
+erst wieder löschbar, wenn die Stunde zufällig wieder auftaucht.
+
+**Verschiebt die Schule einen Slot dauerhaft, muss der Name einmal neu
+gesetzt werden.** Das ist der Preis dafür, dass die Zuordnung ohne eine
+Kennung aus Untis auskommt — eine solche gibt es in den gelieferten Daten
+nicht.
+
 **ToDos** kommen über `board_members`, nicht über eine `user_id` an `lists` —
 seit den geteilten Listen (21.07.2026) hängen Bereiche an einem Board, und wer
 ein Board sehen darf, steht ausschließlich in `board_members`.
@@ -146,6 +180,30 @@ Höchstens 40 ToDos; wird der Deckel erreicht, sagt die Kachel das („… weite
 in der ToDo-Liste"). Eine stille Kürzung sähe aus wie „mehr ist da nicht".
 Ebenso nennt der Kachelkopf die Zahl der sichtbaren Bereiche, sobald gefiltert
 wird — eine kurze Liste soll nicht wie „mehr ist nicht offen" aussehen.
+
+### Reihenfolge und Ausblenden
+
+Beides steht in den Einstellungen unter „Kacheln": Pfeile für die Reihenfolge,
+Häkchen fürs Anzeigen. **Pfeile statt Ziehen**, weil Drag-and-drop am Handy
+fummelig ist und für fünf Zeilen deutlich mehr Code bräuchte, als es
+einbringt.
+
+Am großen Bildschirm füllt die Liste die **zwei Spalten abwechselnd**: erste
+Kachel links, zweite rechts, dritte links. Das ist Leserichtung und behält die
+echten Spalten bei (kein Karten-Gitter, siehe „Layout"). Am Handy zählt
+allein die Reihenfolge von oben nach unten.
+
+Technisch verteilt `ordneKarten()` in `app.js` die Kacheln auf die beiden
+`.spalte`-Behälter und setzt zusätzlich `style.order` — am Handy lösen sich
+die Spalten per `display: contents` auf, dort zählt nur `order`. Die festen
+`order`-Werte im CSS sind seitdem nur noch der Notnagel, falls das Skript nie
+läuft. Ausgeblendete Kacheln wandern ans Ende der linken Spalte, damit ihr
+Platz im DOM festliegt statt davon abzuhängen, wo sie zufällig standen.
+
+Bleibt nur **eine** Kachel übrig, geht die Tafel auf eine Spalte (`einspaltig`)
+— sonst stünde sie auf halber Breite neben leerem Platz. Sind **alle**
+abgewählt, steht dort ein Hinweis mit dem Weg zurück; eine leere Seite sähe
+kaputt aus.
 
 ## Google-Kalender
 
@@ -213,12 +271,31 @@ Ausnahme ist das **Farbschema**: das bleibt im Browser-Speicher, weil es am
 Gerät hängt (heller Bildschirm im Unterricht, dunkler abends) und nicht an der
 Person.
 
+Gespeichert sind vier Felder:
+
+| Feld | Inhalt |
+|---|---|
+| `versteckteBereiche` | abgewählte ToDo-Bereiche (Liste von `list_id`) |
+| `stundenNamen` | `"wochentag\|startzeit\|fachkürzel"` → eigener Name |
+| `kartenReihenfolge` | Reihenfolge der Kacheln, leer = Standard |
+| `versteckteKarten` | abgewählte Kacheln |
+
+**`PUT /api/einstellungen` ersetzt den Block als GANZES.** Die Seite schickt
+deshalb immer alle vier Felder mit, auch die, die gerade niemand angefasst
+hat: mit nur einem Feld setzte der Server die übrigen auf ihren Standard
+zurück — ein umbenanntes Fach löschte dann die Bereichsfilter.
+
+Nachgeladen (`GET /api/dashboard`) wird nur nach einer Änderung an den
+**Bereichen**: deren Filter wirkt in der Datenbankabfrage, und nur von dort
+stimmt auch die Zahl der gekürzten Einträge. Kachelreihenfolge und
+Stundennamen sind reine Anzeige.
+
 **Falle, beim Testen gefunden:** Ein einfaches „läuft gerade schon" beim
 Speichern verschluckte den zweiten von zwei schnellen Klicks — er wurde
 übersprungen, und das Neuladen danach setzte das Kästchen wieder auf den alten
 Stand. Zwei Bereiche hintereinander abzuwählen ist aber der Normalfall.
-Jetzt sammelt eine Uhr die Klicks (400 ms) und liest beim Ablauf frisch aus
-dem DOM, statt einen laufenden Vorgang zu blockieren.
+Jetzt landet jede Änderung sofort in `stand.einstellungen`, eine Uhr sammelt
+sie 400 ms lang und schickt beim Ablauf genau das, was dort steht.
 
 **Gewohnheiten:** `web/functions/_lib/tag.js` ist eine **Spiegelung** der
 Regeln aus `Fokus/web/functions/_lib/tag.js` und

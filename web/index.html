@@ -53,6 +53,10 @@
      Auf schmalen Bildschirmen loesen sich die Spalten per display:contents
      auf und die `order`-Werte legen die Reihenfolge fest. -->
 <main id="tafel" hidden>
+ <!-- Der Ausweg, wenn wirklich alles abgewaehlt ist: eine leere Seite sieht
+      kaputt aus, und der Weg zurueck steht nirgends. -->
+ <p class="tafel-leer" id="tafelLeer" hidden>Alle Kacheln sind ausgeblendet — über ⚙️ oben rechts wieder anhaken.</p>
+
  <div class="spalte">
   <section class="karte" id="karteStundenplan">
     <div class="karte-kopf">
@@ -128,6 +132,32 @@
             <span class="switch-track"><span class="switch-thumb"></span></span>
           </label>
         </div>
+
+        <details class="ein-abschnitt" data-abschnitt="karten">
+          <summary class="ein-kopf">
+            <span class="ein-kopf-icon">🗂️</span>
+            <span class="ein-kopf-text">Kacheln</span>
+            <span class="ein-kopf-sub" id="subKarten"></span>
+            <span class="ein-kopf-pfeil">▾</span>
+          </summary>
+          <div class="ein-inhalt">
+            <p class="ein-hinweis">Reihenfolge mit den Pfeilen, Häkchen weg blendet die Kachel aus. Am großen Bildschirm füllt die Liste die beiden Spalten abwechselnd — erste links, zweite rechts, dritte links.</p>
+            <div id="kartenListe"></div>
+          </div>
+        </details>
+
+        <details class="ein-abschnitt" data-abschnitt="stunden">
+          <summary class="ein-kopf">
+            <span class="ein-kopf-icon">🕗</span>
+            <span class="ein-kopf-text">Namen im Stundenplan</span>
+            <span class="ein-kopf-sub" id="subStunden"></span>
+            <span class="ein-kopf-pfeil">▾</span>
+          </summary>
+          <div class="ein-inhalt">
+            <p class="ein-hinweis">Eigene Namen für die Stunden — sie hängen an Wochentag und Uhrzeit und wiederholen sich damit jede Woche. Leeres Feld heißt: wieder der Name aus WebUntis.</p>
+            <div id="stundenListe"></div>
+          </div>
+        </details>
 
         <details class="ein-abschnitt" data-abschnitt="bereiche">
           <summary class="ein-kopf">
